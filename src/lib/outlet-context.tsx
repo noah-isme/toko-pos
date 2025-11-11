@@ -47,13 +47,13 @@ export function OutletProvider({ children }: { children: ReactNode }) {
   // Persist current outlet to localStorage
   useEffect(() => {
     if (currentOutlet) {
-      localStorage.setItem("kios-pos:current-outlet", JSON.stringify(currentOutlet));
+      localStorage.setItem("toko-pos:current-outlet", JSON.stringify(currentOutlet));
     }
   }, [currentOutlet]);
 
   // Load current outlet from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("kios-pos:current-outlet");
+    const saved = localStorage.getItem("toko-pos:current-outlet");
     if (saved) {
       try {
         const outlet = JSON.parse(saved);

@@ -129,7 +129,7 @@ Sesi ini fokus pada finalisasi dan dokumentasi proyek Kios POS. Beberapa file do
 ## Struktur Dokumentasi Final
 
 ```
-kios-pos/
+toko-pos/
 ├── README.md                   # ← Entry point, quick start
 ├── DOCS_INDEX.md              # ← Navigation hub (MULAI DI SINI)
 ├── PROJECT_SUMMARY.md         # ← Architecture & overview

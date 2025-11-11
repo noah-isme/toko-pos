@@ -8,7 +8,7 @@ type CachedProduct = {
   price: number;
 };
 
-const DB_NAME = "kios-pos";
+const DB_NAME = "toko-pos";
 const STORE_NAME = "catalog";
 const DB_VERSION = 1;
 
@@ -71,4 +71,3 @@ export async function getCachedProductByBarcode(barcode: string): Promise<Cached
     });
   });
 }
-

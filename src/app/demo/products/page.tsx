@@ -78,7 +78,7 @@ const columnConfig = [
   { key: "stock", label: "Stok" },
 ] as const;
 
-const STORAGE_KEY = "kios-pos:demo-products-columns";
+const STORAGE_KEY = "toko-pos:demo-products-columns";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -160,7 +160,7 @@ export default function DemoProductsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "kios-pos-demo-products.csv";
+    link.download = "toko-pos-demo-products.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -310,4 +310,3 @@ export default function DemoProductsPage() {
     </div>
   );
 }
-

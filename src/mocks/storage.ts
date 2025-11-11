@@ -1,4 +1,4 @@
-const DB_NAME = "kios-pos-mock";
+const DB_NAME = "toko-pos-mock";
 const STORE_NAME = "state";
 const KEY = "db";
 const CURRENT_SEED_REVISION = 2;

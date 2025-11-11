@@ -52,7 +52,7 @@ const PRODUCT_COLUMNS = [
 
 type ColumnKey = (typeof PRODUCT_COLUMNS)[number]["key"];
 
-const COLUMN_STORAGE_KEY = "kios-pos:products-columns";
+const COLUMN_STORAGE_KEY = "toko-pos:products-columns";
 
 const defaultColumnVisibility: VisibilityState = PRODUCT_COLUMNS.reduce(
   (acc, column) => ({ ...acc, [column.key]: true }),

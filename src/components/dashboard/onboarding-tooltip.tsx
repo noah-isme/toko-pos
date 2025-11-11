@@ -9,7 +9,7 @@ export default function OnboardingTooltip() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem("kios-pos-onboarding-seen");
+    const hasSeenOnboarding = localStorage.getItem("toko-pos-onboarding-seen");
     if (!hasSeenOnboarding) {
       setIsVisible(true);
     }
@@ -17,7 +17,7 @@ export default function OnboardingTooltip() {
 
   const handleClose = () => {
     setIsVisible(false);
-    localStorage.setItem("kios-pos-onboarding-seen", "true");
+    localStorage.setItem("toko-pos-onboarding-seen", "true");
   };
 
   return (

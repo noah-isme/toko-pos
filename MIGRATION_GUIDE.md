@@ -26,8 +26,8 @@ Pastikan Anda telah menginstal:
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/noah-isme/kios-pos.git
-cd kios-pos
+git clone https://github.com/noah-isme/toko-pos.git
+cd toko-pos
 ```
 
 ### 2. Install Dependencies

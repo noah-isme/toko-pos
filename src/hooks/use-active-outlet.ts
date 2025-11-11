@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 
 import { api } from "@/trpc/client";
 
-const STORAGE_KEY = "kios-pos:active-outlet";
+const STORAGE_KEY = "toko-pos:active-outlet";
 
 type OutletOption = {
   id: string;
@@ -85,4 +85,3 @@ export function useActiveOutlet() {
     setActiveOutlet,
   };
 }
-
