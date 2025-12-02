@@ -1,6 +1,6 @@
 # Changelog
 
-Semua perubahan penting pada proyek Kios POS akan didokumentasikan dalam file ini.
+Semua perubahan penting pada proyek Toko POS akan didokumentasikan dalam file ini.
 
 Format ini mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/),
 dan proyek ini mengikuti [Semantic Versioning](https://semver.org/lang/id/).

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Kios POS · Demo Publik",
+  title: "Toko POS · Demo Publik",
   description: "Demo read-only untuk modul kasir, produk, dan laporan.",
 };
 
@@ -22,7 +22,7 @@ export default function DemoLayout({
       <header className="border-b bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4">
           <Link href="/" className="text-base font-semibold tracking-tight">
-            Kios POS · Demo
+            Toko POS · Demo
           </Link>
           <nav className="flex gap-1 text-sm">
             {demoNav.map((item) => (
@@ -46,7 +46,8 @@ export default function DemoLayout({
 
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-10">
         <div className="rounded-xl border border-dashed border-purple-200 bg-white/70 p-4 text-sm text-purple-700">
-          Mode demo bersifat read-only. Data berasal dari mock untuk menunjukkan alur utama.
+          Mode demo bersifat read-only. Data berasal dari mock untuk menunjukkan
+          alur utama.
         </div>
         {children}
       </main>

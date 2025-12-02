@@ -4,7 +4,7 @@ Dokumentasi lengkap tentang perubahan yang dilakukan pada tanggal 14 Oktober 202
 
 ## Ringkasan
 
-Sesi ini fokus pada finalisasi dan dokumentasi proyek Kios POS. Beberapa file dokumentasi komprehensif telah dibuat untuk memudahkan setup, development, dan deployment aplikasi.
+Sesi ini fokus pada finalisasi dan dokumentasi proyek Toko POS. Beberapa file dokumentasi komprehensif telah dibuat untuk memudahkan setup, development, dan deployment aplikasi.
 
 ## Perubahan yang Dilakukan
 
@@ -308,7 +308,7 @@ point.
 
 ## Kesimpulan
 
-Sesi dokumentasi ini telah berhasil membuat fondasi dokumentasi yang solid untuk proyek Kios POS. Dengan 6 file dokumentasi komprehensif (~56 KB, ~1,744 baris), developer baru maupun existing akan lebih mudah untuk:
+Sesi dokumentasi ini telah berhasil membuat fondasi dokumentasi yang solid untuk proyek Toko POS. Dengan 6 file dokumentasi komprehensif (~56 KB, ~1,744 baris), developer baru maupun existing akan lebih mudah untuk:
 
 1. **Setup** - Clear step-by-step guide
 2. **Develop** - Understanding architecture & standards

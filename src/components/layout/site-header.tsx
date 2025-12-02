@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React from "react";
 import Link from "next/link";
 import { LogIn, LogOut, Menu } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -50,7 +50,9 @@ export function SiteHeader({ className }: { className?: string }) {
   const [mounted, setMounted] = React.useState(false);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
   const [shiftDialogOpen, setShiftDialogOpen] = React.useState(false);
-  const [shiftAction, setShiftAction] = React.useState<"open" | "close">("open");
+  const [shiftAction, setShiftAction] = React.useState<"open" | "close">(
+    "open",
+  );
   const [shiftCashInput, setShiftCashInput] = React.useState("");
 
   React.useEffect(() => {
@@ -122,7 +124,8 @@ export function SiteHeader({ className }: { className?: string }) {
       setShiftCashInput("");
       await refreshShift();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal memproses shift.";
+      const message =
+        error instanceof Error ? error.message : "Gagal memproses shift.";
       toast.error(message);
     }
   };
@@ -149,7 +152,10 @@ export function SiteHeader({ className }: { className?: string }) {
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-80 p-0">
-                <nav className="flex flex-col gap-1 p-3" aria-label="Navigasi utama">
+                <nav
+                  className="flex flex-col gap-1 p-3"
+                  aria-label="Navigasi utama"
+                >
                   {navItems.map((item) => {
                     const isActive = pathname?.startsWith(item.href);
                     return (
@@ -160,7 +166,10 @@ export function SiteHeader({ className }: { className?: string }) {
                         className="justify-start"
                         asChild
                       >
-                        <Link href={item.href} onClick={() => setMobileNavOpen(false)}>
+                        <Link
+                          href={item.href}
+                          onClick={() => setMobileNavOpen(false)}
+                        >
                           {item.label}
                         </Link>
                       </Button>
@@ -171,7 +180,7 @@ export function SiteHeader({ className }: { className?: string }) {
             </Dialog>
           )}
           <Link href="/" className="text-lg font-semibold">
-            Kios POS
+            Toko POS
           </Link>
           {isAuthenticated ? (
             <nav className="hidden gap-1 lg:flex" aria-label="Navigasi utama">
@@ -179,8 +188,15 @@ export function SiteHeader({ className }: { className?: string }) {
                 {navItems.map((item) => {
                   const isActive = pathname?.startsWith(item.href);
                   return (
-                    <MotionItem key={item.href} as="div" className="inline-block">
-                      <Button variant={isActive ? "secondary" : "ghost"} asChild>
+                    <MotionItem
+                      key={item.href}
+                      as="div"
+                      className="inline-block"
+                    >
+                      <Button
+                        variant={isActive ? "secondary" : "ghost"}
+                        asChild
+                      >
                         <Link href={item.href}>{item.label}</Link>
                       </Button>
                     </MotionItem>
@@ -219,14 +235,19 @@ export function SiteHeader({ className }: { className?: string }) {
               </div>
               <Separator orientation="vertical" className="hidden lg:block" />
               <div className="hidden flex-col items-end gap-1 lg:flex">
-                <Badge variant={activeShift ? "outline" : "secondary"} className="text-xs font-medium">
+                <Badge
+                  variant={activeShift ? "outline" : "secondary"}
+                  className="text-xs font-medium"
+                >
                   {shiftStatusLabel}
                 </Badge>
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={shiftButtonDisabled}
-                  onClick={() => handleShiftButton(activeShift ? "close" : "open")}
+                  onClick={() =>
+                    handleShiftButton(activeShift ? "close" : "open")
+                  }
                 >
                   {shiftButtonLabel}
                 </Button>
@@ -283,7 +304,9 @@ export function SiteHeader({ className }: { className?: string }) {
         <DialogContent className="space-y-4">
           <DialogHeader>
             <DialogTitle>
-              {shiftAction === "open" ? "Buka Shift Kasir" : "Tutup Shift Kasir"}
+              {shiftAction === "open"
+                ? "Buka Shift Kasir"
+                : "Tutup Shift Kasir"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2">

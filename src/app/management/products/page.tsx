@@ -24,7 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { listVariants } from "@/components/ui/motion-variants";
 import MotionList, { MotionItem } from "@/components/ui/motion-list";
 import { MotionTableBody, MotionTableRow } from "@/components/ui/motion-table";
@@ -179,27 +185,28 @@ export default function ProductManagementPage() {
     // noop: we handle scheduling manually in handler
   });
   const outletsQuery = api.outlets.list.useQuery();
-  
-  type ProductRow = NonNullable<typeof productsQuery.data>[number];
 
+  type ProductRow = NonNullable<typeof productsQuery.data>[number];
 
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedSupplier, setSelectedSupplier] = useState<string>("all");
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
-    if (typeof window === "undefined") {
-      return defaultColumnVisibility;
-    }
-    const stored = window.localStorage.getItem(COLUMN_STORAGE_KEY);
-    if (!stored) {
-      return defaultColumnVisibility;
-    }
-    try {
-      const parsed = JSON.parse(stored) as VisibilityState;
-      return { ...defaultColumnVisibility, ...parsed };
-    } catch {
-      return defaultColumnVisibility;
-    }
-  });
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    () => {
+      if (typeof window === "undefined") {
+        return defaultColumnVisibility;
+      }
+      const stored = window.localStorage.getItem(COLUMN_STORAGE_KEY);
+      if (!stored) {
+        return defaultColumnVisibility;
+      }
+      try {
+        const parsed = JSON.parse(stored) as VisibilityState;
+        return { ...defaultColumnVisibility, ...parsed };
+      } catch {
+        return defaultColumnVisibility;
+      }
+    },
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -215,7 +222,8 @@ export default function ProductManagementPage() {
   const activateTaxSetting = api.settings.activateTaxSetting.useMutation();
 
   // move hook to top-level of component to comply with hooks rules
-  const [formState, setFormState] = useState<ProductFormState>(emptyProductForm);
+  const [formState, setFormState] =
+    useState<ProductFormState>(emptyProductForm);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState(emptyCategoryDraft);
   const [supplierDraft, setSupplierDraft] = useState(emptySupplierDraft);
@@ -227,7 +235,9 @@ export default function ProductManagementPage() {
   const [movementNote, setMovementNote] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [isMinStockDialogOpen, setIsMinStockDialogOpen] = useState(false);
-  const [minStockProduct, setMinStockProduct] = useState<ProductRow | null>(null);
+  const [minStockProduct, setMinStockProduct] = useState<ProductRow | null>(
+    null,
+  );
   const [minStockDraftValue, setMinStockDraftValue] = useState("0");
 
   const resetForm = () => {
@@ -241,7 +251,8 @@ export default function ProductManagementPage() {
   );
 
   const activeTaxRate = useMemo(
-    () => taxSettingsQuery.data?.find((setting) => setting.isActive)?.rate ?? null,
+    () =>
+      taxSettingsQuery.data?.find((setting) => setting.isActive)?.rate ?? null,
     [taxSettingsQuery.data],
   );
   const productOptions = productsQuery.data ?? [];
@@ -271,10 +282,13 @@ export default function ProductManagementPage() {
     { productId: movementProductId, limit: 25 },
     { enabled: Boolean(movementProductId), refetchInterval: 60_000 },
   );
-  const createStockAdjustment = api.products.createStockAdjustment.useMutation();
+  const createStockAdjustment =
+    api.products.createStockAdjustment.useMutation();
 
   const selectedMovementProduct = useMemo(
-    () => productOptions.find((product) => product.id === movementProductId) ?? null,
+    () =>
+      productOptions.find((product) => product.id === movementProductId) ??
+      null,
     [movementProductId, productOptions],
   );
   const inventoryRecords = inventoryQuery.data ?? [];
@@ -286,7 +300,10 @@ export default function ProductManagementPage() {
   );
   const setProductMinStock = api.inventory.setProductMinStock.useMutation({
     async onSuccess() {
-      await Promise.all([ctx.products.list.invalidate(), lowStockQuery.refetch()]);
+      await Promise.all([
+        ctx.products.list.invalidate(),
+        lowStockQuery.refetch(),
+      ]);
     },
   });
   const lowStockAlerts = lowStockQuery.data ?? [];
@@ -315,7 +332,13 @@ export default function ProductManagementPage() {
       const matchLowStock = !lowStockOnly || lowStockProductIds.has(product.id);
       return matchCategory && matchSupplier && matchLowStock;
     });
-  }, [productsQuery.data, selectedCategory, selectedSupplier, lowStockOnly, lowStockProductIds]);
+  }, [
+    productsQuery.data,
+    selectedCategory,
+    selectedSupplier,
+    lowStockOnly,
+    lowStockProductIds,
+  ]);
   const handleMinStockDialogClose = (open: boolean) => {
     setIsMinStockDialogOpen(open);
     if (!open) {
@@ -351,179 +374,185 @@ export default function ProductManagementPage() {
   };
 
   const columns = useMemo<ColumnDef<ProductRow>[]>(() => {
-    const baseColumns: ColumnDef<ProductRow>[] = PRODUCT_COLUMNS.map((column) => {
-      const key = column.key as string;
-      const label = column.label;
-      const align = column.align;
+    const baseColumns: ColumnDef<ProductRow>[] = PRODUCT_COLUMNS.map(
+      (column) => {
+        const key = column.key as string;
+        const label = column.label;
+        const align = column.align;
 
-      if (column.key === "name") {
-        return {
-          id: key,
-          accessorKey: "name",
-          header: label,
-          meta: { align, label, key },
-          size: 260,
-          cell: ({ row }) => (
-            <div className="flex flex-col">
-              <span className="font-medium text-foreground">{row.original.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {row.original.category ?? "Tanpa kategori"}
-              </span>
-            </div>
-          ),
-        } satisfies ColumnDef<ProductRow>;
-      }
-
-      if (column.key === "sku") {
-        return {
-          id: key,
-          accessorKey: "sku",
-          header: label,
-          meta: { align, label, key },
-          size: 160,
-          cell: ({ row }) => row.original.sku ?? "-",
-        } satisfies ColumnDef<ProductRow>;
-      }
-
-      if (column.key === "barcode") {
-        return {
-          id: key,
-          accessorKey: "barcode",
-          header: label,
-          meta: { align, label, key },
-          size: 160,
-          cell: ({ row }) => row.original.barcode ?? "-",
-        } satisfies ColumnDef<ProductRow>;
-      }
-
-      if (column.key === "supplier") {
-        return {
-          id: key,
-          accessorKey: "supplier",
-          header: label,
-          meta: { align, label, key },
-          size: 180,
-          cell: ({ row }) => row.original.supplier ?? "-",
-        } satisfies ColumnDef<ProductRow>;
-      }
-
-      if (column.key === "price") {
-        return {
-          id: key,
-          accessorKey: "price",
-          header: label,
-          meta: { align, label, key },
-          size: 140,
-          cell: ({ row }) => (
-            <span className="whitespace-nowrap">
-              {formatCurrency(row.original.price ?? 0)}
-            </span>
-          ),
-        } satisfies ColumnDef<ProductRow>;
-      }
-
-      if (column.key === "discount") {
-        return {
-          id: key,
-          accessorFn: (row) => row.defaultDiscountPercent,
-          header: label,
-          meta: { align, label, key },
-          size: 120,
-          cell: ({ row }) => formatPercent(row.original.defaultDiscountPercent),
-        } satisfies ColumnDef<ProductRow>;
-      }
-
-      if (column.key === "promo") {
-        return {
-          id: key,
-          accessorFn: (row) => row.promoPrice,
-          header: label,
-          meta: { align, label, key },
-          size: 200,
-          cell: ({ row }) => {
-            if (!row.original.promoPrice) {
-              return "-";
-            }
-            return (
-              <div className="flex flex-col items-end text-right">
-                <span>
-                  {row.original.promoName ?? "Promo"} ·{" "}
-                  {formatCurrency(row.original.promoPrice)}
+        if (column.key === "name") {
+          return {
+            id: key,
+            accessorKey: "name",
+            header: label,
+            meta: { align, label, key },
+            size: 260,
+            cell: ({ row }) => (
+              <div className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  {row.original.name}
                 </span>
-                {row.original.promoStart ? (
-                  <span className="text-xs text-muted-foreground">
-                    {formatDate(row.original.promoStart)} - {formatDate(row.original.promoEnd)}
-                  </span>
-                ) : null}
+                <span className="text-xs text-muted-foreground">
+                  {row.original.category ?? "Tanpa kategori"}
+                </span>
               </div>
-            );
-          },
-        } satisfies ColumnDef<ProductRow>;
-      }
+            ),
+          } satisfies ColumnDef<ProductRow>;
+        }
 
-      if (column.key === "tax") {
-        return {
-          id: key,
-          accessorFn: (row) => row.taxRate,
-          header: label,
-          meta: { align, label, key },
-          size: 120,
-          cell: ({ row }) =>
-            row.original.isTaxable
-              ? formatPercent(row.original.taxRate ?? activeTaxRate)
-              : "-",
-        } satisfies ColumnDef<ProductRow>;
-      }
+        if (column.key === "sku") {
+          return {
+            id: key,
+            accessorKey: "sku",
+            header: label,
+            meta: { align, label, key },
+            size: 160,
+            cell: ({ row }) => row.original.sku ?? "-",
+          } satisfies ColumnDef<ProductRow>;
+        }
 
-      if (column.key === "minStock") {
-        return {
-          id: key,
-          accessorFn: (row) => row.minStock,
-          header: label,
-          meta: { align, label, key },
-          size: 120,
-          cell: ({ row }) => (
-            <span className="block text-right tabular-nums font-medium">
-              {row.original.minStock ?? 0}
-            </span>
-          ),
-        } satisfies ColumnDef<ProductRow>;
-      }
+        if (column.key === "barcode") {
+          return {
+            id: key,
+            accessorKey: "barcode",
+            header: label,
+            meta: { align, label, key },
+            size: 160,
+            cell: ({ row }) => row.original.barcode ?? "-",
+          } satisfies ColumnDef<ProductRow>;
+        }
 
-      if (column.key === "stockStatus") {
-        return {
-          id: key,
-          header: label,
-          meta: { align, label, key },
-          size: 200,
-          cell: ({ row }) => {
-            const minStock = row.original.minStock ?? 0;
-            const alert = lowStockMap.get(row.original.id);
-            if (minStock <= 0) {
-              return <Badge variant="outline">Belum diatur</Badge>;
-            }
-            if (alert) {
+        if (column.key === "supplier") {
+          return {
+            id: key,
+            accessorKey: "supplier",
+            header: label,
+            meta: { align, label, key },
+            size: 180,
+            cell: ({ row }) => row.original.supplier ?? "-",
+          } satisfies ColumnDef<ProductRow>;
+        }
+
+        if (column.key === "price") {
+          return {
+            id: key,
+            accessorKey: "price",
+            header: label,
+            meta: { align, label, key },
+            size: 140,
+            cell: ({ row }) => (
+              <span className="whitespace-nowrap">
+                {formatCurrency(row.original.price ?? 0)}
+              </span>
+            ),
+          } satisfies ColumnDef<ProductRow>;
+        }
+
+        if (column.key === "discount") {
+          return {
+            id: key,
+            accessorFn: (row) => row.defaultDiscountPercent,
+            header: label,
+            meta: { align, label, key },
+            size: 120,
+            cell: ({ row }) =>
+              formatPercent(row.original.defaultDiscountPercent),
+          } satisfies ColumnDef<ProductRow>;
+        }
+
+        if (column.key === "promo") {
+          return {
+            id: key,
+            accessorFn: (row) => row.promoPrice,
+            header: label,
+            meta: { align, label, key },
+            size: 200,
+            cell: ({ row }) => {
+              if (!row.original.promoPrice) {
+                return "-";
+              }
               return (
-                <div className="flex flex-col items-start gap-1">
-                  <Badge variant="destructive">Low</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    Qty {alert.quantity ?? "-"} / Min {minStock}
+                <div className="flex flex-col items-end text-right">
+                  <span>
+                    {row.original.promoName ?? "Promo"} ·{" "}
+                    {formatCurrency(row.original.promoPrice)}
                   </span>
+                  {row.original.promoStart ? (
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(row.original.promoStart)} -{" "}
+                      {formatDate(row.original.promoEnd)}
+                    </span>
+                  ) : null}
                 </div>
               );
-            }
-            return <Badge variant="secondary">Aman</Badge>;
-          },
-        } satisfies ColumnDef<ProductRow>;
-      }
+            },
+          } satisfies ColumnDef<ProductRow>;
+        }
 
-      return {
-        id: key,
-        accessorKey: key,
-        header: label,
-        meta: { align, label, key },
-      } satisfies ColumnDef<ProductRow>;
-    });
+        if (column.key === "tax") {
+          return {
+            id: key,
+            accessorFn: (row) => row.taxRate,
+            header: label,
+            meta: { align, label, key },
+            size: 120,
+            cell: ({ row }) =>
+              row.original.isTaxable
+                ? formatPercent(row.original.taxRate ?? activeTaxRate)
+                : "-",
+          } satisfies ColumnDef<ProductRow>;
+        }
+
+        if (column.key === "minStock") {
+          return {
+            id: key,
+            accessorFn: (row) => row.minStock,
+            header: label,
+            meta: { align, label, key },
+            size: 120,
+            cell: ({ row }) => (
+              <span className="block text-right tabular-nums font-medium">
+                {row.original.minStock ?? 0}
+              </span>
+            ),
+          } satisfies ColumnDef<ProductRow>;
+        }
+
+        if (column.key === "stockStatus") {
+          return {
+            id: key,
+            header: label,
+            meta: { align, label, key },
+            size: 200,
+            cell: ({ row }) => {
+              const minStock = row.original.minStock ?? 0;
+              const alert = lowStockMap.get(row.original.id);
+              if (minStock <= 0) {
+                return <Badge variant="outline">Belum diatur</Badge>;
+              }
+              if (alert) {
+                return (
+                  <div className="flex flex-col items-start gap-1">
+                    <Badge variant="destructive">Low</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Qty {alert.quantity ?? "-"} / Min {minStock}
+                    </span>
+                  </div>
+                );
+              }
+              return <Badge variant="secondary">Aman</Badge>;
+            },
+          } satisfies ColumnDef<ProductRow>;
+        }
+
+        return {
+          id: key,
+          accessorKey: key,
+          header: label,
+          meta: { align, label, key },
+        } satisfies ColumnDef<ProductRow>;
+      },
+    );
 
     baseColumns.push({
       id: "actions",
@@ -567,7 +596,9 @@ export default function ProductManagementPage() {
                   : "",
                 isTaxable: row.original.isTaxable,
                 taxRate:
-                  row.original.taxRate != null ? String(row.original.taxRate) : "",
+                  row.original.taxRate != null
+                    ? String(row.original.taxRate)
+                    : "",
                 minStock: String(row.original.minStock ?? 0),
               });
               setIsProductModalOpen(true);
@@ -606,12 +637,10 @@ export default function ProductManagementPage() {
       return;
     }
 
-    const visibleColumns = table
-      .getAllLeafColumns()
-      .filter((column) => {
-        const meta = getColumnMeta(column.columnDef.meta);
-        return column.getIsVisible() && meta.key && meta.key !== "actions";
-      });
+    const visibleColumns = table.getAllLeafColumns().filter((column) => {
+      const meta = getColumnMeta(column.columnDef.meta);
+      return column.getIsVisible() && meta.key && meta.key !== "actions";
+    });
 
     if (!visibleColumns.length) {
       toast.info("Tampilkan minimal satu kolom sebelum ekspor.");
@@ -648,21 +677,21 @@ export default function ProductManagementPage() {
                 return product.promoPrice
                   ? `${product.promoName ?? "Promo"} ${product.promoPrice}`
                   : "";
-            case "tax":
-              return product.isTaxable
-                ? String(product.taxRate ?? activeTaxRate ?? 0)
-                : "";
-            case "minStock":
-              return String(product.minStock ?? 0);
-            case "stockStatus":
-              if ((product.minStock ?? 0) <= 0) {
-                return "Belum diatur";
-              }
-              return lowStockProductIds.has(product.id) ? "Low" : "Aman";
-            default:
-              return "";
-          }
-        })
+              case "tax":
+                return product.isTaxable
+                  ? String(product.taxRate ?? activeTaxRate ?? 0)
+                  : "";
+              case "minStock":
+                return String(product.minStock ?? 0);
+              case "stockStatus":
+                if ((product.minStock ?? 0) <= 0) {
+                  return "Belum diatur";
+                }
+                return lowStockProductIds.has(product.id) ? "Low" : "Aman";
+              default:
+                return "";
+            }
+          })
           .join(","),
       )
       .join("\n");
@@ -696,7 +725,7 @@ export default function ProductManagementPage() {
     const resolvedTaxRate = formState.isTaxable
       ? formState.taxRate
         ? Number(formState.taxRate)
-        : activeTaxRate ?? undefined
+        : (activeTaxRate ?? undefined)
       : undefined;
 
     const payload = {
@@ -713,9 +742,15 @@ export default function ProductManagementPage() {
         ? Number(formState.defaultDiscountPercent)
         : undefined,
       promoName: formState.promoName || undefined,
-      promoPrice: formState.promoPrice ? Number(formState.promoPrice) : undefined,
-      promoStart: formState.promoStart ? new Date(formState.promoStart).toISOString() : undefined,
-      promoEnd: formState.promoEnd ? new Date(formState.promoEnd).toISOString() : undefined,
+      promoPrice: formState.promoPrice
+        ? Number(formState.promoPrice)
+        : undefined,
+      promoStart: formState.promoStart
+        ? new Date(formState.promoStart).toISOString()
+        : undefined,
+      promoEnd: formState.promoEnd
+        ? new Date(formState.promoEnd).toISOString()
+        : undefined,
       isTaxable: formState.isTaxable,
       taxRate: resolvedTaxRate,
       minStock: parsedMinStock,
@@ -761,13 +796,18 @@ export default function ProductManagementPage() {
       toast.success("Pergerakan stok berhasil dicatat");
       setMovementQuantity("");
       setMovementNote("");
-      await Promise.all([inventoryQuery.refetch(), stockMovementsQuery.refetch()]);
+      await Promise.all([
+        inventoryQuery.refetch(),
+        stockMovementsQuery.refetch(),
+      ]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal mencatat pergerakan stok.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal mencatat pergerakan stok.";
       toast.error(message);
     }
   };
-
 
   const handleCategorySubmit = async () => {
     if (!categoryDraft.name.trim()) {
@@ -781,7 +821,9 @@ export default function ProductManagementPage() {
         name: categoryDraft.name,
       });
       await categoriesQuery.refetch();
-      toast.success(`Kategori ${categoryDraft.id ? "diperbarui" : "ditambahkan"}`);
+      toast.success(
+        `Kategori ${categoryDraft.id ? "diperbarui" : "ditambahkan"}`,
+      );
       setCategoryDraft(emptyCategoryDraft);
     } catch (error) {
       console.error(error);
@@ -800,17 +842,23 @@ export default function ProductManagementPage() {
       const snapshot = await optimisticOnMutate(ctx, "categories", id);
 
       // schedule server delete
-      const { scheduleDelete, cancelScheduledDelete } = await import("@/lib/delete-queue");
+      const { scheduleDelete, cancelScheduledDelete } = await import(
+        "@/lib/delete-queue"
+      );
       scheduleDelete(`category:${id}`, async () => {
         await deleteCategory.mutateAsync({ id });
       });
 
-      const undone = await showUndo({ label: "Kategori dihapus", seconds: 6, onUndo: async () => {
-        cancelScheduledDelete(`category:${id}`);
-        if (snapshot?.previous) {
-          ctx.products.categories.setData(undefined, () => snapshot.previous);
-        }
-      } });
+      const undone = await showUndo({
+        label: "Kategori dihapus",
+        seconds: 6,
+        onUndo: async () => {
+          cancelScheduledDelete(`category:${id}`);
+          if (snapshot?.previous) {
+            ctx.products.categories.setData(undefined, () => snapshot.previous);
+          }
+        },
+      });
 
       if (!undone) {
         await ctx.products.categories.invalidate();
@@ -818,7 +866,11 @@ export default function ProductManagementPage() {
       }
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Kategori masih digunakan oleh produk.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Kategori masih digunakan oleh produk.",
+      );
     }
   };
 
@@ -836,7 +888,9 @@ export default function ProductManagementPage() {
         phone: supplierDraft.phone || undefined,
       });
       await suppliersQuery.refetch();
-      toast.success(`Supplier ${supplierDraft.id ? "diperbarui" : "ditambahkan"}`);
+      toast.success(
+        `Supplier ${supplierDraft.id ? "diperbarui" : "ditambahkan"}`,
+      );
       setSupplierDraft(emptySupplierDraft);
     } catch (error) {
       console.error(error);
@@ -853,17 +907,23 @@ export default function ProductManagementPage() {
       const { optimisticOnMutate } = await import("@/lib/optimistic");
       const snapshot = await optimisticOnMutate(ctx, "suppliers", id);
 
-      const { scheduleDelete, cancelScheduledDelete } = await import("@/lib/delete-queue");
+      const { scheduleDelete, cancelScheduledDelete } = await import(
+        "@/lib/delete-queue"
+      );
       scheduleDelete(`supplier:${id}`, async () => {
         await deleteSupplier.mutateAsync({ id });
       });
 
-      const undone = await showUndo({ label: "Supplier dihapus", seconds: 6, onUndo: async () => {
-        cancelScheduledDelete(`supplier:${id}`);
-        if (snapshot?.previous) {
-          ctx.products.suppliers.setData(undefined, () => snapshot.previous);
-        }
-      } });
+      const undone = await showUndo({
+        label: "Supplier dihapus",
+        seconds: 6,
+        onUndo: async () => {
+          cancelScheduledDelete(`supplier:${id}`);
+          if (snapshot?.previous) {
+            ctx.products.suppliers.setData(undefined, () => snapshot.previous);
+          }
+        },
+      });
 
       if (!undone) {
         await ctx.products.suppliers.invalidate();
@@ -871,7 +931,11 @@ export default function ProductManagementPage() {
       }
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Supplier masih digunakan oleh produk.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Supplier masih digunakan oleh produk.",
+      );
     }
   };
 
@@ -889,7 +953,9 @@ export default function ProductManagementPage() {
         isActive: taxDraft.isActive,
       });
       await taxSettingsQuery.refetch();
-      toast.success(`Konfigurasi pajak ${taxDraft.id ? "diperbarui" : "ditambahkan"}`);
+      toast.success(
+        `Konfigurasi pajak ${taxDraft.id ? "diperbarui" : "ditambahkan"}`,
+      );
       setTaxDraft(emptyTaxDraft);
     } catch (error) {
       console.error(error);
@@ -910,11 +976,11 @@ export default function ProductManagementPage() {
 
   return (
     <div className="space-y-6">
-
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Manajemen Produk</h1>
         <p className="text-muted-foreground">
-          Kelola katalog produk, kategori, supplier, dan pengaturan pajak untuk operasi kios yang efisien.
+          Kelola katalog produk, kategori, supplier, dan pengaturan pajak untuk
+          operasi toko yang efisien.
         </p>
       </header>
 
@@ -978,13 +1044,18 @@ export default function ProductManagementPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Daftar Produk</CardTitle>
-                <CardDescription>Monitor harga, promo, supplier, dan status pajak.</CardDescription>
+                <CardDescription>
+                  Monitor harga, promo, supplier, dan status pajak.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[minmax(0,240px)_minmax(0,200px)_minmax(0,200px)_minmax(0,240px)] lg:items-end lg:gap-3">
                     <div className="grid gap-1.5">
-                      <label className="text-xs font-medium text-muted-foreground" htmlFor="search-products">
+                      <label
+                        className="text-xs font-medium text-muted-foreground"
+                        htmlFor="search-products"
+                      >
                         Cari produk
                       </label>
                       <Input
@@ -994,13 +1065,18 @@ export default function ProductManagementPage() {
                       />
                     </div>
                     <div className="grid gap-1.5">
-                      <label className="text-xs font-medium text-muted-foreground" htmlFor="filter-category">
+                      <label
+                        className="text-xs font-medium text-muted-foreground"
+                        htmlFor="filter-category"
+                      >
                         Kategori
                       </label>
                       <select
                         id="filter-category"
                         value={selectedCategory}
-                        onChange={(event) => setSelectedCategory(event.target.value)}
+                        onChange={(event) =>
+                          setSelectedCategory(event.target.value)
+                        }
                         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="all">Semua kategori</option>
@@ -1012,13 +1088,18 @@ export default function ProductManagementPage() {
                       </select>
                     </div>
                     <div className="grid gap-1.5">
-                      <label className="text-xs font-medium text-muted-foreground" htmlFor="filter-supplier">
+                      <label
+                        className="text-xs font-medium text-muted-foreground"
+                        htmlFor="filter-supplier"
+                      >
                         Supplier
                       </label>
                       <select
                         id="filter-supplier"
                         value={selectedSupplier}
-                        onChange={(event) => setSelectedSupplier(event.target.value)}
+                        onChange={(event) =>
+                          setSelectedSupplier(event.target.value)
+                        }
                         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="all">Semua supplier</option>
@@ -1081,7 +1162,8 @@ export default function ProductManagementPage() {
                 </div>
                 {!hasMinStockConfigured && !productsQuery.isLoading && (
                   <div className="rounded-md border border-dashed border-amber-300 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
-                    Belum ada ambang minimum. Mulai atur minStock pada produk inti Anda.
+                    Belum ada ambang minimum. Mulai atur minStock pada produk
+                    inti Anda.
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1116,17 +1198,29 @@ export default function ProductManagementPage() {
                         {table.getHeaderGroups().map((headerGroup) => (
                           <TableRow key={headerGroup.id}>
                             {headerGroup.headers.map((header) => {
-                              const meta = getColumnMeta(header.column.columnDef.meta);
-                              const align = meta.align === "right" ? "text-right" : "text-left";
+                              const meta = getColumnMeta(
+                                header.column.columnDef.meta,
+                              );
+                              const align =
+                                meta.align === "right"
+                                  ? "text-right"
+                                  : "text-left";
                               return (
                                 <TableHead
                                   key={header.id}
                                   className={`relative ${align}`}
-                                  style={{ width: header.getSize() ? `${header.getSize()}px` : undefined }}
+                                  style={{
+                                    width: header.getSize()
+                                      ? `${header.getSize()}px`
+                                      : undefined,
+                                  }}
                                 >
                                   {header.isPlaceholder
                                     ? null
-                                    : flexRender(header.column.columnDef.header, header.getContext())}
+                                    : flexRender(
+                                        header.column.columnDef.header,
+                                        header.getContext(),
+                                      )}
                                   {header.column.getCanResize() ? (
                                     <div
                                       onMouseDown={header.getResizeHandler()}
@@ -1144,39 +1238,67 @@ export default function ProductManagementPage() {
                         {table.getRowModel().rows.map((row) => (
                           <MotionTableRow key={row.id} className="border-b">
                             {row.getVisibleCells().map((cell) => {
-                              const meta = getColumnMeta(cell.column.columnDef.meta);
-                              const align = meta.align === "right" ? "text-right" : "";
+                              const meta = getColumnMeta(
+                                cell.column.columnDef.meta,
+                              );
+                              const align =
+                                meta.align === "right" ? "text-right" : "";
                               return (
                                 <TableCell
                                   key={cell.id}
                                   className={align}
-                                  style={{ width: cell.column.getSize() ? `${cell.column.getSize()}px` : undefined }}
+                                  style={{
+                                    width: cell.column.getSize()
+                                      ? `${cell.column.getSize()}px`
+                                      : undefined,
+                                  }}
                                 >
-                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                  {flexRender(
+                                    cell.column.columnDef.cell,
+                                    cell.getContext(),
+                                  )}
                                 </TableCell>
                               );
                             })}
                           </MotionTableRow>
                         ))}
                         {table.getRowModel().rows.length === 0 && (
-                          <MotionTableRow className="border-b" variants={{ hidden: { opacity: 0 }, show: { opacity: 1 } }}>
+                          <MotionTableRow
+                            className="border-b"
+                            variants={{
+                              hidden: { opacity: 0 },
+                              show: { opacity: 1 },
+                            }}
+                          >
                             <TableCell
-                              colSpan={Math.max(table.getVisibleLeafColumns().length, 1)}
+                              colSpan={Math.max(
+                                table.getVisibleLeafColumns().length,
+                                1,
+                              )}
                               className="py-10 text-center text-sm text-muted-foreground"
                             >
                               <div className="flex flex-col items-center gap-3">
-                                <p>Belum ada produk. Import master data atau tambah manual terlebih dahulu.</p>
+                                <p>
+                                  Belum ada produk. Import master data atau
+                                  tambah manual terlebih dahulu.
+                                </p>
                                 <div className="flex flex-wrap justify-center gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => toast.info("Gunakan script seed: pnpm seed:products")}
+                                    onClick={() =>
+                                      toast.info(
+                                        "Gunakan script seed: pnpm seed:products",
+                                      )
+                                    }
                                   >
                                     Impor CSV
                                   </Button>
                                   <Button
                                     size="sm"
-                                    onClick={() => setFormState(emptyProductForm)}
+                                    onClick={() =>
+                                      setFormState(emptyProductForm)
+                                    }
                                   >
                                     Tambah Produk
                                   </Button>
@@ -1192,12 +1314,18 @@ export default function ProductManagementPage() {
               </CardContent>
             </Card>
 
-            <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
+            <Dialog
+              open={isProductModalOpen}
+              onOpenChange={setIsProductModalOpen}
+            >
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>{editingProduct ? "Ubah Produk" : "Tambah Produk"}</DialogTitle>
+                  <DialogTitle>
+                    {editingProduct ? "Ubah Produk" : "Tambah Produk"}
+                  </DialogTitle>
                   <DialogDescription>
-                    Lengkapi informasi harga pokok, diskon standar, promo musiman, dan konfigurasi PPN per produk.
+                    Lengkapi informasi harga pokok, diskon standar, promo
+                    musiman, dan konfigurasi PPN per produk.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -1206,7 +1334,12 @@ export default function ProductManagementPage() {
                     <Input
                       id="name"
                       value={formState.name}
-                      onChange={(event) => setFormState((state) => ({ ...state, name: event.target.value }))}
+                      onChange={(event) =>
+                        setFormState((state) => ({
+                          ...state,
+                          name: event.target.value,
+                        }))
+                      }
                     />
                   </div>
                   <div className="grid gap-2">
@@ -1214,7 +1347,12 @@ export default function ProductManagementPage() {
                     <Input
                       id="sku"
                       value={formState.sku}
-                      onChange={(event) => setFormState((state) => ({ ...state, sku: event.target.value }))}
+                      onChange={(event) =>
+                        setFormState((state) => ({
+                          ...state,
+                          sku: event.target.value,
+                        }))
+                      }
                     />
                   </div>
                   <div className="grid gap-2">
@@ -1223,7 +1361,10 @@ export default function ProductManagementPage() {
                       id="barcode"
                       value={formState.barcode}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, barcode: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          barcode: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -1235,7 +1376,10 @@ export default function ProductManagementPage() {
                       min={0}
                       value={formState.price}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, price: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          price: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -1247,7 +1391,10 @@ export default function ProductManagementPage() {
                       min={0}
                       value={formState.costPrice}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, costPrice: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          costPrice: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -1257,7 +1404,10 @@ export default function ProductManagementPage() {
                       id="category"
                       value={formState.categoryId}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, categoryId: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          categoryId: event.target.value,
+                        }))
                       }
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -1275,7 +1425,10 @@ export default function ProductManagementPage() {
                       id="supplier"
                       value={formState.supplierId}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, supplierId: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          supplierId: event.target.value,
+                        }))
                       }
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -1284,8 +1437,8 @@ export default function ProductManagementPage() {
                         <option key={supplier.id} value={supplier.id}>
                           {supplier.name}
                         </option>
-                        ))}
-                      </select>
+                      ))}
+                    </select>
                   </div>
                   <div className="grid gap-1.5">
                     <Label htmlFor="minStock">Stok Minimum (minStock)</Label>
@@ -1295,15 +1448,21 @@ export default function ProductManagementPage() {
                       min={0}
                       value={formState.minStock}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, minStock: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          minStock: event.target.value,
+                        }))
                       }
                     />
                     <p className="text-xs text-muted-foreground">
-                      Sistem akan memicu alert ketika stok aktual &lt;= minStock.
+                      Sistem akan memicu alert ketika stok aktual &lt;=
+                      minStock.
                     </p>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="defaultDiscountPercent">Diskon Standar (%)</Label>
+                    <Label htmlFor="defaultDiscountPercent">
+                      Diskon Standar (%)
+                    </Label>
                     <Input
                       id="defaultDiscountPercent"
                       type="number"
@@ -1312,7 +1471,10 @@ export default function ProductManagementPage() {
                       step="0.01"
                       value={formState.defaultDiscountPercent}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, defaultDiscountPercent: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          defaultDiscountPercent: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -1322,7 +1484,10 @@ export default function ProductManagementPage() {
                       id="promoName"
                       value={formState.promoName}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, promoName: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          promoName: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -1334,7 +1499,10 @@ export default function ProductManagementPage() {
                       min={0}
                       value={formState.promoPrice}
                       onChange={(event) =>
-                        setFormState((state) => ({ ...state, promoPrice: event.target.value }))
+                        setFormState((state) => ({
+                          ...state,
+                          promoPrice: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -1346,7 +1514,10 @@ export default function ProductManagementPage() {
                         type="date"
                         value={formState.promoStart}
                         onChange={(event) =>
-                          setFormState((state) => ({ ...state, promoStart: event.target.value }))
+                          setFormState((state) => ({
+                            ...state,
+                            promoStart: event.target.value,
+                          }))
                         }
                       />
                     </div>
@@ -1357,7 +1528,10 @@ export default function ProductManagementPage() {
                         type="date"
                         value={formState.promoEnd}
                         onChange={(event) =>
-                          setFormState((state) => ({ ...state, promoEnd: event.target.value }))
+                          setFormState((state) => ({
+                            ...state,
+                            promoEnd: event.target.value,
+                          }))
                         }
                       />
                     </div>
@@ -1369,7 +1543,10 @@ export default function ProductManagementPage() {
                         id="isTaxable"
                         checked={formState.isTaxable}
                         onChange={(event) =>
-                          setFormState((state) => ({ ...state, isTaxable: event.target.checked }))
+                          setFormState((state) => ({
+                            ...state,
+                            isTaxable: event.target.checked,
+                          }))
                         }
                         className="h-4 w-4 rounded border border-input"
                       />
@@ -1387,13 +1564,20 @@ export default function ProductManagementPage() {
                         step="0.01"
                         value={formState.taxRate}
                         onChange={(event) =>
-                          setFormState((state) => ({ ...state, taxRate: event.target.value }))
+                          setFormState((state) => ({
+                            ...state,
+                            taxRate: event.target.value,
+                          }))
                         }
                       />
                     </div>
                   )}
                   <div className="flex gap-2 pt-2">
-                    <Button className="flex-1" onClick={() => void handleSubmit()} disabled={upsertProduct.isPending}>
+                    <Button
+                      className="flex-1"
+                      onClick={() => void handleSubmit()}
+                      disabled={upsertProduct.isPending}
+                    >
                       {upsertProduct.isPending ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1410,12 +1594,16 @@ export default function ProductManagementPage() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Dialog open={isMinStockDialogOpen} onOpenChange={handleMinStockDialogClose}>
+            <Dialog
+              open={isMinStockDialogOpen}
+              onOpenChange={handleMinStockDialogClose}
+            >
               <DialogContent className="sm:max-w-sm">
                 <DialogHeader>
                   <DialogTitle>Atur Stok Minimum</DialogTitle>
                   <DialogDescription>
-                    Ambang ini dipakai untuk memicu Low Stock Alert dan badge pada daftar produk.
+                    Ambang ini dipakai untuk memicu Low Stock Alert dan badge
+                    pada daftar produk.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -1431,16 +1619,21 @@ export default function ProductManagementPage() {
                       type="number"
                       min={0}
                       value={minStockDraftValue}
-                      onChange={(event) => setMinStockDraftValue(event.target.value)}
+                      onChange={(event) =>
+                        setMinStockDraftValue(event.target.value)
+                      }
                     />
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Sistem akan memicu LowStockAlert ketika stok aktual di outlet aktif berada di bawah angka ini.
+                    Sistem akan memicu LowStockAlert ketika stok aktual di
+                    outlet aktif berada di bawah angka ini.
                   </div>
                   <div className="flex gap-2">
                     <Button
                       className="flex-1"
-                      disabled={setProductMinStock.isPending || !minStockProduct}
+                      disabled={
+                        setProductMinStock.isPending || !minStockProduct
+                      }
                       onClick={() => void handleSaveMinStock()}
                     >
                       {setProductMinStock.isPending ? (
@@ -1452,7 +1645,10 @@ export default function ProductManagementPage() {
                         "Simpan"
                       )}
                     </Button>
-                    <Button variant="outline" onClick={() => handleMinStockDialogClose(false)}>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleMinStockDialogClose(false)}
+                    >
                       Batal
                     </Button>
                   </div>
@@ -1469,7 +1665,9 @@ export default function ProductManagementPage() {
           <Card>
             <CardHeader>
               <CardTitle>Kategori Produk</CardTitle>
-              <CardDescription>Kelola klasifikasi untuk laporan dan filter kasir.</CardDescription>
+              <CardDescription>
+                Kelola klasifikasi untuk laporan dan filter kasir.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-2">
@@ -1479,18 +1677,26 @@ export default function ProductManagementPage() {
                   placeholder="Contoh: Minuman"
                   value={categoryDraft.name}
                   onChange={(event) =>
-                    setCategoryDraft((draft) => ({ ...draft, name: event.target.value }))
+                    setCategoryDraft((draft) => ({
+                      ...draft,
+                      name: event.target.value,
+                    }))
                   }
                 />
                 <div className="flex gap-2">
-                  <Button onClick={() => void handleCategorySubmit()} disabled={upsertCategory.isPending}>
+                  <Button
+                    onClick={() => void handleCategorySubmit()}
+                    disabled={upsertCategory.isPending}
+                  >
                     {upsertCategory.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Memproses...
                       </>
+                    ) : categoryDraft.id ? (
+                      "Perbarui"
                     ) : (
-                      categoryDraft.id ? "Perbarui" : "Tambah"
+                      "Tambah"
                     )}
                   </Button>
                   {categoryDraft.id && (
@@ -1506,17 +1712,26 @@ export default function ProductManagementPage() {
               <div className="space-y-2">
                 <MotionList as="div" className="space-y-2">
                   {categoriesQuery.data?.map((category) => (
-                    <MotionItem key={category.id} as="div" className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2">
+                    <MotionItem
+                      key={category.id}
+                      as="div"
+                      className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2"
+                    >
                       <div>
                         <p className="text-sm font-medium">{category.name}</p>
-                        <p className="text-xs text-muted-foreground">{category.slug}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {category.slug}
+                        </p>
                       </div>
                       <div className="flex gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() =>
-                            setCategoryDraft({ id: category.id, name: category.name })
+                            setCategoryDraft({
+                              id: category.id,
+                              name: category.name,
+                            })
                           }
                         >
                           Edit
@@ -1533,7 +1748,9 @@ export default function ProductManagementPage() {
                   ))}
                 </MotionList>
                 {categoriesQuery.data?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Belum ada kategori.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada kategori.
+                  </p>
                 )}
               </div>
             </CardContent>
@@ -1547,7 +1764,9 @@ export default function ProductManagementPage() {
           <Card>
             <CardHeader>
               <CardTitle>Supplier</CardTitle>
-              <CardDescription>Catat vendor untuk mempermudah restock dan negosiasi harga.</CardDescription>
+              <CardDescription>
+                Catat vendor untuk mempermudah restock dan negosiasi harga.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-2 md:grid-cols-3">
@@ -1558,7 +1777,10 @@ export default function ProductManagementPage() {
                     placeholder="PT Nusantara Beans"
                     value={supplierDraft.name}
                     onChange={(event) =>
-                      setSupplierDraft((draft) => ({ ...draft, name: event.target.value }))
+                      setSupplierDraft((draft) => ({
+                        ...draft,
+                        name: event.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -1570,7 +1792,10 @@ export default function ProductManagementPage() {
                     placeholder="sales@supplier.com"
                     value={supplierDraft.email}
                     onChange={(event) =>
-                      setSupplierDraft((draft) => ({ ...draft, email: event.target.value }))
+                      setSupplierDraft((draft) => ({
+                        ...draft,
+                        email: event.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -1581,20 +1806,28 @@ export default function ProductManagementPage() {
                     placeholder="+62-21-8890-1111"
                     value={supplierDraft.phone}
                     onChange={(event) =>
-                      setSupplierDraft((draft) => ({ ...draft, phone: event.target.value }))
+                      setSupplierDraft((draft) => ({
+                        ...draft,
+                        phone: event.target.value,
+                      }))
                     }
                   />
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={() => void handleSupplierSubmit()} disabled={upsertSupplier.isPending}>
+                <Button
+                  onClick={() => void handleSupplierSubmit()}
+                  disabled={upsertSupplier.isPending}
+                >
                   {upsertSupplier.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Memproses...
                     </>
+                  ) : supplierDraft.id ? (
+                    "Perbarui"
                   ) : (
-                    supplierDraft.id ? "Perbarui" : "Tambah"
+                    "Tambah"
                   )}
                 </Button>
                 {supplierDraft.id && (
@@ -1609,12 +1842,18 @@ export default function ProductManagementPage() {
               <div className="space-y-2">
                 <MotionList as="div" className="space-y-2">
                   {suppliersQuery.data?.map((supplier) => (
-                    <MotionItem key={supplier.id} as="div" className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2">
+                    <MotionItem
+                      key={supplier.id}
+                      as="div"
+                      className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2"
+                    >
                       <div>
                         <p className="text-sm font-medium">{supplier.name}</p>
                         {(supplier.email || supplier.phone) && (
                           <p className="text-xs text-muted-foreground">
-                            {[supplier.email, supplier.phone].filter(Boolean).join(" · ")}
+                            {[supplier.email, supplier.phone]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </p>
                         )}
                       </div>
@@ -1645,7 +1884,9 @@ export default function ProductManagementPage() {
                   ))}
                 </MotionList>
                 {suppliersQuery.data?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Belum ada supplier.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada supplier.
+                  </p>
                 )}
               </div>
             </CardContent>
@@ -1660,7 +1901,8 @@ export default function ProductManagementPage() {
             <CardHeader>
               <CardTitle>Pengaturan PPN</CardTitle>
               <CardDescription>
-                Simpan tarif PPN nasional atau outlet tertentu dan pilih mana yang aktif untuk kasir.
+                Simpan tarif PPN nasional atau outlet tertentu dan pilih mana
+                yang aktif untuk kasir.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1672,7 +1914,10 @@ export default function ProductManagementPage() {
                     placeholder="Contoh: PPN 11%"
                     value={taxDraft.name}
                     onChange={(event) =>
-                      setTaxDraft((draft) => ({ ...draft, name: event.target.value }))
+                      setTaxDraft((draft) => ({
+                        ...draft,
+                        name: event.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -1686,20 +1931,28 @@ export default function ProductManagementPage() {
                     step="0.01"
                     value={taxDraft.rate}
                     onChange={(event) =>
-                      setTaxDraft((draft) => ({ ...draft, rate: event.target.value }))
+                      setTaxDraft((draft) => ({
+                        ...draft,
+                        rate: event.target.value,
+                      }))
                     }
                   />
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={() => void handleTaxSubmit()} disabled={upsertTaxSetting.isPending}>
+                <Button
+                  onClick={() => void handleTaxSubmit()}
+                  disabled={upsertTaxSetting.isPending}
+                >
                   {upsertTaxSetting.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Memproses...
                     </>
+                  ) : taxDraft.id ? (
+                    "Perbarui"
                   ) : (
-                    taxDraft.id ? "Perbarui" : "Tambah"
+                    "Tambah"
                   )}
                 </Button>
                 {taxDraft.id && (
@@ -1714,10 +1967,16 @@ export default function ProductManagementPage() {
               <div className="space-y-2">
                 <MotionList as="div" className="space-y-2">
                   {taxSettingsQuery.data?.map((setting) => (
-                    <MotionItem key={setting.id} as="div" className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2">
+                    <MotionItem
+                      key={setting.id}
+                      as="div"
+                      className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2"
+                    >
                       <div>
                         <p className="text-sm font-medium">{setting.name}</p>
-                        <p className="text-xs text-muted-foreground">{setting.rate}% {setting.isActive ? "(Aktif)" : ""}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {setting.rate}% {setting.isActive ? "(Aktif)" : ""}
+                        </p>
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -1748,7 +2007,9 @@ export default function ProductManagementPage() {
                   ))}
                 </MotionList>
                 {taxSettingsQuery.data?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Belum ada tarif PPN tersimpan.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada tarif PPN tersimpan.
+                  </p>
                 )}
               </div>
             </CardContent>
@@ -1762,7 +2023,8 @@ export default function ProductManagementPage() {
             <CardHeader>
               <CardTitle>Penyesuaian Stok Manual</CardTitle>
               <CardDescription>
-                Catat pergerakan stok masuk/keluar dengan alasan yang jelas untuk audit harian.
+                Catat pergerakan stok masuk/keluar dengan alasan yang jelas
+                untuk audit harian.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1772,7 +2034,9 @@ export default function ProductManagementPage() {
                   <select
                     id="movement-product"
                     value={movementProductId}
-                    onChange={(event) => setMovementProductId(event.target.value)}
+                    onChange={(event) =>
+                      setMovementProductId(event.target.value)
+                    }
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {productOptions.map((product) => (
@@ -1780,7 +2044,9 @@ export default function ProductManagementPage() {
                         {product.name}
                       </option>
                     ))}
-                    {productOptions.length === 0 && <option value="">Belum ada produk</option>}
+                    {productOptions.length === 0 && (
+                      <option value="">Belum ada produk</option>
+                    )}
                   </select>
                 </div>
                 <div className="grid gap-1.5">
@@ -1788,7 +2054,9 @@ export default function ProductManagementPage() {
                   <select
                     id="movement-outlet"
                     value={movementOutletId}
-                    onChange={(event) => setMovementOutletId(event.target.value)}
+                    onChange={(event) =>
+                      setMovementOutletId(event.target.value)
+                    }
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {(outletsQuery.data ?? []).map((outlet) => (
@@ -1806,7 +2074,9 @@ export default function ProductManagementPage() {
                   <select
                     id="movement-type"
                     value={movementType}
-                    onChange={(event) => setMovementType(event.target.value as "IN" | "OUT")}
+                    onChange={(event) =>
+                      setMovementType(event.target.value as "IN" | "OUT")
+                    }
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="IN">IN · Tambah stok</option>
@@ -1820,7 +2090,9 @@ export default function ProductManagementPage() {
                     type="number"
                     min={1}
                     value={movementQuantity}
-                    onChange={(event) => setMovementQuantity(event.target.value)}
+                    onChange={(event) =>
+                      setMovementQuantity(event.target.value)
+                    }
                   />
                 </div>
               </div>
@@ -1871,24 +2143,38 @@ export default function ProductManagementPage() {
                     Memuat data stok…
                   </div>
                 ) : inventoryRecords.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Belum ada stok tercatat untuk produk ini.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada stok tercatat untuk produk ini.
+                  </p>
                 ) : (
                   <div className="overflow-hidden rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Outlet</TableHead>
-                          <TableHead className="w-24 text-right">Stok</TableHead>
+                          <TableHead className="w-24 text-right">
+                            Stok
+                          </TableHead>
                           <TableHead className="w-48">Terakhir</TableHead>
                         </TableRow>
                       </TableHeader>
                       <MotionTableBody>
                         {inventoryRecords.map((record) => (
-                          <MotionTableRow key={record.outletId} className="border-b">
-                            <TableCell className="font-medium">{record.outletName}</TableCell>
-                            <TableCell className="text-right">{record.quantity}</TableCell>
+                          <MotionTableRow
+                            key={record.outletId}
+                            className="border-b"
+                          >
+                            <TableCell className="font-medium">
+                              {record.outletName}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {record.quantity}
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
-                              {format(new Date(record.updatedAt), "dd MMM yyyy HH:mm")}
+                              {format(
+                                new Date(record.updatedAt),
+                                "dd MMM yyyy HH:mm",
+                              )}
                             </TableCell>
                           </MotionTableRow>
                         ))}
@@ -1903,7 +2189,9 @@ export default function ProductManagementPage() {
               <CardHeader className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <CardTitle>Riwayat Pergerakan</CardTitle>
-                  <CardDescription>25 aktivitas stok terbaru untuk produk terpilih.</CardDescription>
+                  <CardDescription>
+                    25 aktivitas stok terbaru untuk produk terpilih.
+                  </CardDescription>
                 </div>
                 <Button
                   type="button"
@@ -1925,7 +2213,9 @@ export default function ProductManagementPage() {
                     Memuat pergerakan stok…
                   </div>
                 ) : movementRecords.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Belum ada pergerakan stok untuk produk ini.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada pergerakan stok untuk produk ini.
+                  </p>
                 ) : (
                   <div className="overflow-hidden rounded-md border">
                     <Table className="[&_tbody]:block [&_tbody]:max-h-[360px] [&_tbody]:overflow-auto">
@@ -1933,7 +2223,9 @@ export default function ProductManagementPage() {
                         <TableRow>
                           <TableHead className="w-44">Waktu</TableHead>
                           <TableHead>Outlet</TableHead>
-                          <TableHead className="w-24 text-center">Tipe</TableHead>
+                          <TableHead className="w-24 text-center">
+                            Tipe
+                          </TableHead>
                           <TableHead className="w-24 text-right">Qty</TableHead>
                           <TableHead>Catatan</TableHead>
                           <TableHead className="w-36">Petugas</TableHead>
@@ -1944,17 +2236,28 @@ export default function ProductManagementPage() {
                           const quantity = movement.quantity;
                           const quantityLabel = `${quantity > 0 ? "+" : ""}${quantity}`;
                           return (
-                            <MotionTableRow key={movement.id} className="border-b">
+                            <MotionTableRow
+                              key={movement.id}
+                              className="border-b"
+                            >
                               <TableCell className="text-sm text-muted-foreground">
-                                {format(new Date(movement.occurredAt), "dd MMM yyyy HH:mm")}
+                                {format(
+                                  new Date(movement.occurredAt),
+                                  "dd MMM yyyy HH:mm",
+                                )}
                               </TableCell>
                               <TableCell>{movement.outletName}</TableCell>
                               <TableCell className="text-center">
-                                <Badge variant="outline" className="text-xs uppercase">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs uppercase"
+                                >
                                   {movement.type}
                                 </Badge>
                               </TableCell>
-                              <TableCell className={`text-right font-medium ${quantity >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                              <TableCell
+                                className={`text-right font-medium ${quantity >= 0 ? "text-emerald-600" : "text-destructive"}`}
+                              >
                                 {quantityLabel}
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground">

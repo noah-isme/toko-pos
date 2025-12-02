@@ -4,7 +4,9 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
-import NextAuthDefault, { getServerSession as _getServerSession } from "next-auth";
+import NextAuthDefault, {
+  getServerSession as _getServerSession,
+} from "next-auth";
 
 const NextAuth = NextAuthDefault;
 const getServerSession = _getServerSession;
@@ -23,18 +25,21 @@ let Role: any;
 try {
   // dynamic import of local modules (may fail in some test runners)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const localEnv = await import('@/env');
+  const localEnv = await import("@/env");
   env = localEnv.env;
-  const localDb = await import('@/server/db');
+  const localDb = await import("@/server/db");
   db = localDb.db;
-  const localEnums = await import('@/server/db/enums');
+  const localEnums = await import("@/server/db/enums");
   Role = localEnums.Role;
 } catch (e) {
-  console.error("Error importing local runtime modules (env/db):", (e as Error)?.stack ?? String(e));
+  console.error(
+    "Error importing local runtime modules (env/db):",
+    (e as Error)?.stack ?? String(e),
+  );
   // Mark test fallback so tests can detect we are using a stubbed runtime.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as unknown as Record<string, unknown>).__TEST_FALLBACKS__ = true;
-  env = { NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? 'dev-secret' };
+  env = { NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "dev-secret" };
   db = {
     user: {
       findUnique: async () => null,
@@ -43,13 +48,13 @@ try {
       count: async () => 0,
     },
   };
-  Role = { ADMIN: 'ADMIN', OWNER: 'OWNER', CASHIER: 'CASHIER' };
+  Role = { ADMIN: "ADMIN", OWNER: "OWNER", CASHIER: "CASHIER" };
 }
 
 // Credentials-only auth (email + password). Email/Google providers removed.
-import type { NextAuthOptions } from 'next-auth';
-import type { Adapter } from 'next-auth/adapters';
-import type { JWT } from 'next-auth/jwt';
+import type { NextAuthOptions } from "next-auth";
+import type { Adapter } from "next-auth/adapters";
+import type { JWT } from "next-auth/jwt";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db) as Adapter,
@@ -62,25 +67,39 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     CredentialsProvider({
-      name: 'Credentials',
+      name: "Credentials",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
-        async authorize(credentials: { email?: string; password?: string } | undefined) {
-          if (!credentials?.email || !credentials?.password) return null;
-        const user = await db.user.findUnique({ where: { email: credentials.email } });
+      async authorize(
+        credentials: { email?: string; password?: string } | undefined,
+      ) {
+        if (!credentials?.email || !credentials?.password) return null;
+        const user = await db.user.findUnique({
+          where: { email: credentials.email },
+        });
         if (!user || !user.passwordHash) return null;
-        const valid = await bcrypt.compare(credentials.password, user.passwordHash);
+        const valid = await bcrypt.compare(
+          credentials.password,
+          user.passwordHash,
+        );
         if (!valid) return null;
-        return { id: user.id, name: user.name ?? undefined, email: user.email ?? undefined, role: user.role };
+        return {
+          id: user.id,
+          name: user.name ?? undefined,
+          email: user.email ?? undefined,
+          role: user.role,
+        };
       },
     }),
     EmailProvider({
       from: env.EMAIL_FROM ?? "no-reply@example.com",
       sendVerificationRequest: async ({ identifier, url }) => {
         const configuredTransport =
-          env.EMAIL_SERVER_HOST && env.EMAIL_SERVER_USER && env.EMAIL_SERVER_PASSWORD;
+          env.EMAIL_SERVER_HOST &&
+          env.EMAIL_SERVER_USER &&
+          env.EMAIL_SERVER_PASSWORD;
 
         const transport = configuredTransport
           ? nodemailer.createTransport({
@@ -98,9 +117,9 @@ export const authOptions: NextAuthOptions = {
         const result = await transport.sendMail({
           to: identifier,
           from: env.EMAIL_FROM ?? "no-reply@example.com",
-          subject: "Tautan Masuk Kios POS",
-          text: `Halo!\n\nGunakan tautan berikut untuk masuk ke Kios POS:\n\n${url}\n\nTautan ini berlaku selama 10 menit.`,
-          html: `<p>Halo!</p><p>Gunakan tautan berikut untuk masuk ke Kios POS:</p><p><a href="${url}">${url}</a></p><p>Tautan ini berlaku selama 10 menit.</p>`,
+          subject: "Tautan Masuk Toko POS",
+          text: `Halo!\n\nGunakan tautan berikut untuk masuk ke Toko POS:\n\n${url}\n\nTautan ini berlaku selama 10 menit.`,
+          html: `<p>Halo!</p><p>Gunakan tautan berikut untuk masuk ke Toko POS:</p><p><a href="${url}">${url}</a></p><p>Tautan ini berlaku selama 10 menit.</p>`,
         });
 
         if (!configuredTransport) {
@@ -125,11 +144,14 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session && typeof session === "object" && "user" in session) {
-        const sessionUser = (session as Session).user as Record<string, unknown> | undefined;
+        const sessionUser = (session as Session).user as
+          | Record<string, unknown>
+          | undefined;
         if (sessionUser) {
           if (typeof token.sub === "string") sessionUser.id = token.sub;
           const typedToken = token as JWT & { role?: string };
-          if (typeof typedToken.role === "string") sessionUser.role = typedToken.role;
+          if (typeof typedToken.role === "string")
+            sessionUser.role = typedToken.role;
         }
       }
       return session as Session;
@@ -139,27 +161,42 @@ export const authOptions: NextAuthOptions = {
 
 // Helpful debug: log presence of critical env vars (don't print secrets)
 console.log("NEXTAUTH_SECRET set?", !!env.NEXTAUTH_SECRET);
-console.log("EMAIL server configured?", !!(env.EMAIL_SERVER_HOST && env.EMAIL_SERVER_USER && env.EMAIL_SERVER_PASSWORD));
+console.log(
+  "EMAIL server configured?",
+  !!(
+    env.EMAIL_SERVER_HOST &&
+    env.EMAIL_SERVER_USER &&
+    env.EMAIL_SERVER_PASSWORD
+  ),
+);
 
 // Next.js app-route handlers expect functions that accept a Request and
 // return void | Response | Promise<void | Response>. Use that as the
 // handler type so the generated .next types line up.
 let handler: (req: Request) => void | Response | Promise<void | Response>;
 try {
-  console.log('[server/auth] Initializing NextAuth with adapters/providers...');
+  console.log("[server/auth] Initializing NextAuth with adapters/providers...");
   // NextAuth returns a handler function; keep its signature generic to avoid
   // tightly coupling to NextAuth internal types here.
   // NextAuth returns a handler function. Cast it to the narrower Request
   // -> Response | void signature to satisfy Next.js route type checks.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  handler = NextAuth(authOptions) as unknown as (req: Request) => void | Response | Promise<void | Response>;
-  console.log('[server/auth] NextAuth initialized successfully');
+  handler = NextAuth(authOptions) as unknown as (
+    req: Request,
+  ) => void | Response | Promise<void | Response>;
+  console.log("[server/auth] NextAuth initialized successfully");
 } catch (err) {
   // If NextAuth throws during initialization, surface the error to dev logs
-  console.error("Failed to initialize NextAuth:", (err as Error)?.stack ?? String(err));
+  console.error(
+    "Failed to initialize NextAuth:",
+    (err as Error)?.stack ?? String(err),
+  );
   // Fallback handler returns a 500 JSON so the client sees a clear error
   handler = async (req: Request) =>
-    new Response(JSON.stringify({ message: "NextAuth initialization failed" }), { status: 500, headers: { "Content-Type": "application/json" } });
+    new Response(
+      JSON.stringify({ message: "NextAuth initialization failed" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
 }
 
 // Export the NextAuth handler for the App Router. Use aliasing instead of
@@ -171,8 +208,8 @@ try {
 // build an auth-shaped request and then call the NextAuth handler.
 async function buildAuthReq(req: Request) {
   const url = new URL(req.url);
-  const segments = url.pathname.split('/').filter(Boolean).slice(2);
-  const text = await req.text().catch(() => '');
+  const segments = url.pathname.split("/").filter(Boolean).slice(2);
+  const text = await req.text().catch(() => "");
   const authReq: {
     method: string;
     headers: Headers;
@@ -212,12 +249,15 @@ async function invokeHandlerSafely(req: Request) {
     // Handler has a generic signature; cast to unknown when invoking.
     return await (handler as (r: unknown) => Promise<unknown>)(req);
   } catch (err) {
-    console.error('[server/auth] handler invocation error:', (err as Error)?.stack ?? String(err));
+    console.error(
+      "[server/auth] handler invocation error:",
+      (err as Error)?.stack ?? String(err),
+    );
     throw err;
   }
 }
 
-import type { Session } from 'next-auth';
+import type { Session } from "next-auth";
 
 export const getServerAuthSession = async () => {
   if (process.env.NEXT_PUBLIC_E2E === "true") {
@@ -241,8 +281,8 @@ export const getServerAuthSession = async () => {
 export async function ensureAuthenticatedOrRedirect() {
   const session = await getServerAuthSession();
   if (!session) {
-    const { redirect } = await import('next/navigation');
-    redirect('/auth/login');
+    const { redirect } = await import("next/navigation");
+    redirect("/auth/login");
   }
   return session;
 }

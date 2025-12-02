@@ -50,9 +50,9 @@ NEXTAUTH_SECRET=<generate-with-openssl-rand-base64-32>
 EMAIL_SERVER_HOST=smtp.sendgrid.net
 EMAIL_SERVER_PORT=587
 EMAIL_SERVER_USER=apikey
-EMAIL_SERVER_PASSWORD=<sendgrid-api-key>
-EMAIL_FROM=Kios POS <noreply@yourdomain.com>
-
+EMAIL_SERVER_PASSWORD=<your-api-key>
+EMAIL_FROM=Toko POS <noreply@yourdomain.com>
+   
 # Google OAuth
 GOOGLE_CLIENT_ID=<your-client-id>.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=<your-client-secret>
@@ -185,7 +185,7 @@ openssl rand -hex 32
    EMAIL_SERVER_PORT=587
    EMAIL_SERVER_USER=apikey
    EMAIL_SERVER_PASSWORD=<your-api-key>
-   EMAIL_FROM=Kios POS <noreply@yourdomain.com>
+   EMAIL_FROM=Toko POS <noreply@yourdomain.com>
    ```
 
 ### Option 2: Amazon SES
@@ -199,9 +199,8 @@ openssl rand -hex 32
    EMAIL_SERVER_PORT=587
    EMAIL_SERVER_USER=<smtp-username>
    EMAIL_SERVER_PASSWORD=<smtp-password>
-   EMAIL_FROM=Kios POS <noreply@yourdomain.com>
-   ```
-
+   EMAIL_FROM=Toko POS <noreply@yourdomain.com>
+   
 ### Option 3: Resend (Modern Alternative)
 
 1. Daftar di [Resend](https://resend.com)

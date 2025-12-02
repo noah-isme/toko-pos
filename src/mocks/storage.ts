@@ -82,13 +82,13 @@ const seedData: MockDatabase = {
   outlets: [
     {
       id: "outlet-1",
-      name: "Kios Pusat",
+      name: "Toko Pusat",
       code: "MAIN",
       address: "Jl. Raya No. 12, Jakarta",
     },
     {
       id: "outlet-2",
-      name: "Kios Cabang",
+      name: "Toko Cabang",
       code: "BR01",
       address: "Jl. Melati No. 5, Bandung",
     },

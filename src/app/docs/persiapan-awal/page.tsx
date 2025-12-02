@@ -6,7 +6,7 @@ import MotionList, { MotionItem } from "@/components/ui/motion-list";
 export const metadata: Metadata = {
   title: "Persiapan Awal POS",
   description:
-    "Checklist detail untuk merumuskan tujuan, alur, role, dan outlet sebelum implementasi Kios POS dimulai.",
+    "Checklist detail untuk merumuskan tujuan, alur, role, dan outlet sebelum implementasi Toko POS dimulai.",
 };
 
 const goals = [
@@ -53,7 +53,8 @@ export default function PersiapanAwalPage() {
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold">Persiapan Awal POS</h1>
         <p className="text-muted-foreground text-sm">
-          Gunakan checklist berikut untuk mengumpulkan keputusan operasional sebelum menjalankan konfigurasi teknis Kios POS.
+          Gunakan checklist berikut untuk mengumpulkan keputusan operasional
+          sebelum menjalankan konfigurasi teknis Toko POS.
         </p>
       </header>
       <section className="grid gap-4">
@@ -61,15 +62,24 @@ export default function PersiapanAwalPage() {
           const titleId = `goal-title-${i}`;
           const descrId = `goal-desc-${i}`;
           return (
-            <Card key={goal.title} aria-labelledby={titleId} aria-describedby={descrId} className="card-focusable" tabIndex={0}>
+            <Card
+              key={goal.title}
+              aria-labelledby={titleId}
+              aria-describedby={descrId}
+              className="card-focusable"
+              tabIndex={0}
+            >
               <CardHeader>
                 <CardTitle id={titleId}>{goal.title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <p id={descrId} className="sr-only">
-                  {`Rincian ${goal.title}: ${goal.items.slice(0, 3).join(', ')}.`}
+                  {`Rincian ${goal.title}: ${goal.items.slice(0, 3).join(", ")}.`}
                 </p>
-                <MotionList as="ul" className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                <MotionList
+                  as="ul"
+                  className="list-disc space-y-2 pl-5 text-sm text-muted-foreground"
+                >
                   {goal.items.map((item) => (
                     <MotionItem as="li" key={item} className="list-item">
                       {item}
@@ -88,15 +98,23 @@ export default function PersiapanAwalPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              Simpan keputusan di spreadsheet atau tool dokumentasi bersama tim. Template seed Prisma dapat menggunakan model
+              Simpan keputusan di spreadsheet atau tool dokumentasi bersama tim.
+              Template seed Prisma dapat menggunakan model
               <code className="mx-1 rounded bg-muted px-1 py-0.5">Role</code>,
-              <code className="mx-1 rounded bg-muted px-1 py-0.5">Outlet</code>, dan
-              <code className="mx-1 rounded bg-muted px-1 py-0.5">Inventory</code> untuk preload data awal stok per lokasi,
-              ditambah <code className="mx-1 rounded bg-muted px-1 py-0.5">StockMovement</code> jika ingin melacak riwayat awal.
+              <code className="mx-1 rounded bg-muted px-1 py-0.5">Outlet</code>,
+              dan
+              <code className="mx-1 rounded bg-muted px-1 py-0.5">
+                Inventory
+              </code>{" "}
+              untuk preload data awal stok per lokasi, ditambah{" "}
+              <code className="mx-1 rounded bg-muted px-1 py-0.5">
+                StockMovement
+              </code>{" "}
+              jika ingin melacak riwayat awal.
             </p>
             <p>
-              Setelah semua poin terisi, lanjutkan ke langkah konfigurasi perangkat lunak dan data pada halaman panduan
-              implementasi utama.
+              Setelah semua poin terisi, lanjutkan ke langkah konfigurasi
+              perangkat lunak dan data pada halaman panduan implementasi utama.
             </p>
           </CardContent>
         </Card>

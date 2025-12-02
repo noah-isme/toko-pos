@@ -26,10 +26,12 @@ type ReceiptSale = {
     address?: string | null;
     npwp?: string | null;
   } & Record<string, unknown>;
-  cashier: ({
-    id: string;
-    name: string | null;
-  } & Record<string, unknown>) | null;
+  cashier:
+    | ({
+        id: string;
+        name: string | null;
+      } & Record<string, unknown>)
+    | null;
 } & Record<string, unknown>;
 
 type ReceiptItem = {
@@ -67,7 +69,10 @@ type ReceiptInput = {
 
 const mmToPt = (mm: number) => (mm / 25.4) * 72;
 
-const PAPER_PRESETS: Record<"58MM" | "80MM", { width: number; height: number }> = {
+const PAPER_PRESETS: Record<
+  "58MM" | "80MM",
+  { width: number; height: number }
+> = {
   "58MM": { width: mmToPt(58), height: mmToPt(260) },
   "80MM": { width: mmToPt(80), height: mmToPt(300) },
 };
@@ -139,8 +144,8 @@ export const generateReceiptPdf = async ({
 
   const now = new Date();
   pdfDoc.setTitle(`${sale.outlet.name} · ${sale.receiptNumber}`);
-  pdfDoc.setCreator("Kios POS");
-  pdfDoc.setProducer("Kios POS");
+  pdfDoc.setCreator("Toko POS");
+  pdfDoc.setProducer("Toko POS");
   pdfDoc.setCreationDate(now);
   pdfDoc.setModificationDate(now);
   const outletNpwp = sale.outlet.npwp ?? env.STORE_NPWP;
@@ -154,11 +159,21 @@ export const generateReceiptPdf = async ({
   const leftMargin = 16;
   const rightMargin = preset.width - 16;
 
-  const soldAt = sale.soldAt instanceof Date ? sale.soldAt : new Date(sale.soldAt);
-  const subtotal = items.reduce((sum, item) => sum + toNumber(item.unitPrice) * item.quantity, 0);
-  const itemDiscountTotal = items.reduce((sum, item) => sum + toNumber(item.discount ?? 0), 0);
+  const soldAt =
+    sale.soldAt instanceof Date ? sale.soldAt : new Date(sale.soldAt);
+  const subtotal = items.reduce(
+    (sum, item) => sum + toNumber(item.unitPrice) * item.quantity,
+    0,
+  );
+  const itemDiscountTotal = items.reduce(
+    (sum, item) => sum + toNumber(item.discount ?? 0),
+    0,
+  );
   const totalDiscountRecorded = toNumber(sale.discountTotal ?? 0);
-  const orderLevelDiscount = Math.max(totalDiscountRecorded - itemDiscountTotal, 0);
+  const orderLevelDiscount = Math.max(
+    totalDiscountRecorded - itemDiscountTotal,
+    0,
+  );
   const taxAmount = toNumber(sale.taxAmount ?? 0);
   const totalNet = toNumber(sale.totalNet);
 
@@ -236,13 +251,21 @@ export const generateReceiptPdf = async ({
 
   if (itemDiscountTotal > 0) {
     drawText(`Diskon Item`, leftMargin, cursorY);
-    drawRightAligned(`- ${formatCurrency(itemDiscountTotal)}`, rightMargin, cursorY);
+    drawRightAligned(
+      `- ${formatCurrency(itemDiscountTotal)}`,
+      rightMargin,
+      cursorY,
+    );
     cursorY -= lineHeight;
   }
 
   if (orderLevelDiscount > 0) {
     drawText(`Diskon Order`, leftMargin, cursorY);
-    drawRightAligned(`- ${formatCurrency(orderLevelDiscount)}`, rightMargin, cursorY);
+    drawRightAligned(
+      `- ${formatCurrency(orderLevelDiscount)}`,
+      rightMargin,
+      cursorY,
+    );
     cursorY -= lineHeight;
   }
 
@@ -263,7 +286,11 @@ export const generateReceiptPdf = async ({
   cursorY -= lineHeight;
   payments.forEach((payment) => {
     drawText(payment.method, leftMargin, cursorY);
-    drawRightAligned(formatCurrency(Number(payment.amount)), rightMargin, cursorY);
+    drawRightAligned(
+      formatCurrency(Number(payment.amount)),
+      rightMargin,
+      cursorY,
+    );
     cursorY -= lineHeight;
   });
 

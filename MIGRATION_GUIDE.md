@@ -1,6 +1,6 @@
 # Panduan Migrasi Database & Verifikasi
 
-Dokumen ini menjelaskan proses setup database, migrasi, dan verifikasi untuk Kios POS.
+Dokumen ini menjelaskan proses setup database, migrasi, dan verifikasi untuk Toko POS.
 
 ## Daftar Isi
 
@@ -48,8 +48,8 @@ Edit file `.env` dan sesuaikan dengan konfigurasi Anda:
 
 ```env
 # Database Connection (Supabase atau PostgreSQL lokal)
-DATABASE_URL="postgresql://postgres:password@localhost:5432/kios_pos?schema=public"
-SHADOW_DATABASE_URL="postgresql://postgres:password@localhost:5432/kios_pos_shadow?schema=public"
+DATABASE_URL="postgresql://postgres:password@localhost:5432/toko_pos?schema=public"
+SHADOW_DATABASE_URL="postgresql://postgres:password@localhost:5432/toko_pos_shadow?schema=public"
 
 # NextAuth Configuration
 NEXTAUTH_URL="http://localhost:3000"
@@ -60,7 +60,8 @@ EMAIL_SERVER_HOST="smtp.example.com"
 EMAIL_SERVER_PORT=587
 EMAIL_SERVER_USER="your-smtp-username"
 EMAIL_SERVER_PASSWORD="your-smtp-password"
-EMAIL_FROM="Kios POS <no-reply@example.com>"
+EMAIL_FROM="Toko POS <no-reply@example.com>"
+```
 
 # Google OAuth (opsional)
 GOOGLE_CLIENT_ID="your-google-client-id"
@@ -101,12 +102,12 @@ Jika menggunakan PostgreSQL lokal:
 
 ```bash
 # Buat database
-createdb kios_pos
-createdb kios_pos_shadow
+createdb toko_pos
+createdb toko_pos_shadow
 
 # Atau via psql
-psql -U postgres -c "CREATE DATABASE kios_pos;"
-psql -U postgres -c "CREATE DATABASE kios_pos_shadow;"
+psql -U postgres -c "CREATE DATABASE toko_pos;"
+psql -U postgres -c "CREATE DATABASE toko_pos_shadow;"
 ```
 
 ### Setup Database Supabase
@@ -379,7 +380,7 @@ Jika aplikasi menampilkan data mock padahal Anda ingin menggunakan database real
 
 3. **Backup database sebelum migrasi besar**
    ```bash
-   pg_dump -U postgres kios_pos > backup.sql
+   pg_dump -U postgres toko_pos > backup.sql
    ```
 
 ### Production Deployment
@@ -409,4 +410,4 @@ Jika aplikasi menampilkan data mock padahal Anda ingin menggunakan database real
 - [Prisma Documentation](https://www.prisma.io/docs)
 - [Supabase Documentation](https://supabase.com/docs)
 - [NextAuth Documentation](https://next-auth.js.org)
-- [Kios POS README](./README.md)
+- [Toko POS README](./README.md)

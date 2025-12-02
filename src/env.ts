@@ -11,7 +11,7 @@ const envSchema = z.object({
   EMAIL_SERVER_PORT: z.coerce.number().default(587),
   EMAIL_SERVER_USER: z.string().min(1).optional(),
   EMAIL_SERVER_PASSWORD: z.string().min(1).optional(),
-  // Accept either a plain email or a display-name with email in angle brackets, e.g. "Kios POS <no-reply@example.com>"
+  // Accept either a plain email or a display-name with email in angle brackets, e.g. "Toko POS <no-reply@example.com>"
   EMAIL_FROM: z
     .string()
     .optional()
@@ -20,18 +20,16 @@ const envSchema = z.object({
       const match = v.match(/<([^>]+)>/);
       return match ? match[1] : v;
     })
-    .refine((val) => val === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), {
-      message: "Invalid email address",
-    }),
+    .refine(
+      (val) => val === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
+      {
+        message: "Invalid email address",
+      },
+    ),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().optional(),
   STORE_NPWP: z.string().optional(),
-  DISCOUNT_LIMIT_PERCENT: z
-    .coerce
-    .number()
-    .min(0)
-    .max(100)
-    .default(50),
+  DISCOUNT_LIMIT_PERCENT: z.coerce.number().min(0).max(100).default(50),
 });
 
 // Helper: treat empty strings as undefined (helps when env var exists but is empty)
@@ -57,7 +55,10 @@ const parsed = envSchema.safeParse({
 });
 
 if (!parsed.success) {
-  console.error("❌ Invalid environment variables", parsed.error.flatten().fieldErrors);
+  console.error(
+    "❌ Invalid environment variables",
+    parsed.error.flatten().fieldErrors,
+  );
   throw new Error("Missing or invalid environment configuration");
 }
 

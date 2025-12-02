@@ -9,7 +9,7 @@ import PageProgress from "@/components/ui/page-progress";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kios POS",
+  title: "Toko POS",
   description:
     "Modern POS berbasis Next.js dengan tRPC, Prisma, Supabase, dan shadcn/ui.",
 };

@@ -20,7 +20,7 @@ describe("generateReceiptPdf", () => {
     updatedAt: new Date("2024-01-01T10:00:00Z") as unknown as any,
     outlet: {
       id: "outlet-1",
-      name: "Kios Pusat",
+      name: "Toko Pusat",
       code: "MAIN",
       address: "Jl. Raya No. 12",
       createdAt: new Date(),
@@ -67,7 +67,7 @@ describe("generateReceiptPdf", () => {
     });
 
     const doc = await PDFDocument.load(pdfBytes);
-    expect(doc.getTitle()).toContain("Kios Pusat");
+    expect(doc.getTitle()).toContain("Toko Pusat");
     expect(doc.getSubject()).toContain("NPWP");
 
     const [page] = doc.getPages();

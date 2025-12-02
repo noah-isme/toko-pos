@@ -1,4 +1,4 @@
-// Prisma schema for the Kios POS application
+// Prisma schema for the Toko POS application
 
 generator client {
   provider = "prisma-client-js"

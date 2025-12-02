@@ -1,6 +1,6 @@
-# Indeks Dokumentasi Kios POS
+# Indeks Dokumentasi Toko POS
 
-Panduan lengkap untuk memulai, mengembangkan, dan men-deploy aplikasi Kios POS.
+Panduan lengkap untuk memulai, mengembangkan, dan men-deploy aplikasi Toko POS.
 
 ## 📚 Daftar Dokumentasi
 
@@ -266,5 +266,5 @@ Gunakan [Conventional Commits](https://www.conventionalcommits.org/):
 
 **Catatan**: Dokumentasi ini adalah living document. Jika ada informasi yang kurang jelas atau perlu ditambahkan, silakan buat issue atau pull request.
 
-**Maintained by**: Kios POS Team  
+**Maintained by**: Toko POS Team  
 **Last Updated**: 2025-10-14

@@ -1,6 +1,6 @@
-# Kios POS — UI Style Guide
+# Toko POS — UI Style Guide
 
-Ringkasan ini menjelaskan konvensi styling dan komponen UI yang digunakan di proyek Kios POS. Tujuannya:
+Ringkasan ini menjelaskan konvensi styling dan komponen UI yang digunakan di proyek Toko POS. Tujuannya:
 
 - Menyediakan kontrak visual untuk developer dan desainer.
 - Menjelaskan token warna / variable CSS dan cara mereka dipakai bersama Tailwind.
