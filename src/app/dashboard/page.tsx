@@ -1,137 +1,262 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, Layers, ReceiptText, Settings2 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { ArrowRight } from "lucide-react";
+import { format, differenceInMinutes } from "date-fns";
 
+import { OperationalOverview } from "@/components/dashboard/operational-overview";
+import { QuickActions } from "@/components/dashboard/quick-actions";
+import { AlertsSection } from "@/components/dashboard/alerts-section";
+import { MiniCharts } from "@/components/dashboard/mini-charts";
+import { MobileDock } from "@/components/dashboard/mobile-dock";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MotionButton as Button } from "@/components/ui/button";
-import MotionList, { MotionItem } from "@/components/ui/motion-list";
-import { cardVariant, containerCards } from "@/components/ui/motion-variants";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import DashboardWidgets from '@/components/dashboard/widgets';
-import OnboardingTooltip from '@/components/dashboard/onboarding-tooltip';
 import { useOutlet } from "@/lib/outlet-context";
 import { api } from "@/trpc/client";
-import { useSession } from "next-auth/react";
-
-function Breadcrumbs() {
-  return (
-    <nav className="flex items-center space-x-2 text-sm text-muted-foreground">
-      <Link href="/dashboard" className="hover:text-foreground">
-        Dashboard
-      </Link>
-    </nav>
-  );
-}
-
-const quickActions = [
-  { title: "Kasir", description: "Buka kasir untuk transaksi", href: "/cashier", icon: <ReceiptText className="h-5 w-5" />, accent: 'amber' },
-  { title: "Produk", description: "Kelola produk dan stok", href: "/management/products", icon: <Layers className="h-5 w-5" />, accent: 'sky' },
-  { title: "Laporan", description: "Laporan harian & ringkasan", href: "/reports/daily", icon: <BarChart3 className="h-5 w-5" />, accent: 'emerald' },
-  { title: "Pengaturan", description: "Konfigurasi toko dan pengguna", href: "/management/settings", icon: <Settings2 className="h-5 w-5" />, accent: 'slate' },
-];
-
-const ACCENT_CLASSES: Record<string, { icon: string; gradient: string }> = {
-  amber: { icon: 'bg-accent-amber-100 text-accent-amber-700', gradient: 'from-accent-amber-50 via-accent-amber-100 to-accent-amber-200' },
-  sky: { icon: 'bg-accent-sky-100 text-accent-sky-700', gradient: 'from-accent-sky-50 via-accent-sky-100 to-accent-sky-200' },
-  emerald: { icon: 'bg-accent-emerald-100 text-accent-emerald-700', gradient: 'from-accent-emerald-50 via-accent-emerald-100 to-accent-emerald-200' },
-  slate: { icon: 'bg-accent-slate-100 text-accent-slate-700', gradient: 'from-accent-slate-50 via-accent-slate-100 to-accent-slate-200' },
-};
-
-function SummaryCard({ title, value, icon }: { title: string; value: string; icon?: React.ReactNode }) {
-  return (
-    <Card className="p-4 sm:p-5 w-full">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground">{title}</span>
-          {icon}
-        </div>
-        <CardTitle className="text-2xl">{value}</CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const { currentOutlet } = useOutlet();
+  const { currentOutlet, activeShift } = useOutlet();
 
-  const userName = session?.user?.name ?? session?.user?.email ?? 'Pengguna';
-  const role = session?.user?.role ?? 'CASHIER';
+  const userName = session?.user?.name ?? session?.user?.email ?? "Pengguna";
+  const role = (session?.user?.role ?? "CASHIER") as
+    | "OWNER"
+    | "ADMIN"
+    | "CASHIER";
 
-  // Get today's sales count for current outlet
-  const { data: todaySummary } = api.sales.getDailySummary.useQuery({
-    date: new Date().toISOString(),
-    outletId: currentOutlet?.id,
-  });
+  // Get today's sales summary
+  const { data: todaySummary, isLoading: isSummaryLoading } =
+    api.sales.getDailySummary.useQuery(
+      {
+        date: new Date().toISOString(),
+        outletId: currentOutlet?.id,
+      },
+      { enabled: Boolean(currentOutlet?.id), refetchInterval: 30_000 },
+    );
 
-  const todayCount = todaySummary?.sales?.length ?? 0;
+  // Get low stock alerts
+  const { data: lowStockAlerts } = api.inventory.listLowStock.useQuery(
+    { outletId: currentOutlet?.id ?? "", limit: 10 },
+    { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
+  );
+
+  // Calculate operational metrics
+  const operationalData = useMemo(() => {
+    const sales = todaySummary?.sales ?? [];
+    const revenue = sales.reduce((sum, sale) => sum + sale.totalNet, 0);
+    const itemsSold = sales.reduce(
+      (sum, sale) =>
+        sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+      0,
+    );
+
+    const shiftDuration = activeShift?.openTime
+      ? differenceInMinutes(new Date(), new Date(activeShift.openTime))
+      : 0;
+    const hours = Math.floor(shiftDuration / 60);
+    const minutes = shiftDuration % 60;
+
+    return {
+      revenue,
+      transactions: sales.length,
+      itemsSold,
+      shiftStatus: {
+        isActive: Boolean(activeShift),
+        startTime: activeShift?.openTime
+          ? new Date(activeShift.openTime)
+          : undefined,
+        duration:
+          hours > 0
+            ? `${hours}j ${minutes}m`
+            : minutes > 0
+              ? `${minutes}m`
+              : undefined,
+      },
+    };
+  }, [todaySummary, activeShift]);
+
+  // Generate sales chart data (hourly)
+  const salesChartData = useMemo(() => {
+    const sales = todaySummary?.sales ?? [];
+    const hourlyData: Record<string, number> = {};
+
+    // Initialize all hours
+    for (let i = 0; i < 24; i++) {
+      const hour = i.toString().padStart(2, "0");
+      hourlyData[hour] = 0;
+    }
+
+    // Aggregate sales by hour
+    sales.forEach((sale) => {
+      const hour = format(new Date(sale.soldAt), "HH");
+      hourlyData[hour] = (hourlyData[hour] ?? 0) + sale.totalNet;
+    });
+
+    // Get current hour and show last 12 hours
+    const currentHour = new Date().getHours();
+    const startHour = Math.max(0, currentHour - 11);
+    const result = [];
+
+    for (let i = startHour; i <= currentHour; i++) {
+      const hour = i.toString().padStart(2, "0");
+      result.push({
+        hour: `${hour}:00`,
+        amount: hourlyData[hour] ?? 0,
+      });
+    }
+
+    return result;
+  }, [todaySummary]);
+
+  // Generate top products data
+  const topProductsData = useMemo(() => {
+    const sales = todaySummary?.sales ?? [];
+    const productMap: Record<
+      string,
+      { id: string; name: string; sold: number; revenue: number }
+    > = {};
+
+    sales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const key = item.productName;
+        if (!productMap[key]) {
+          productMap[key] = {
+            id: key,
+            name: item.productName,
+            sold: 0,
+            revenue: 0,
+          };
+        }
+        productMap[key].sold += item.quantity;
+        // Approximate revenue since we don't have subtotal
+        productMap[key].revenue +=
+          (sale.totalNet / sale.items.reduce((sum, i) => sum + i.quantity, 0)) *
+          item.quantity;
+      });
+    });
+
+    return Object.values(productMap)
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 5);
+  }, [todaySummary]);
+
+  // Generate alerts
+  const alerts = useMemo(() => {
+    const result = [];
+
+    if (lowStockAlerts && lowStockAlerts.length > 0) {
+      result.push({
+        id: "low-stock",
+        type: "low-stock" as const,
+        title: "Stok Hampir Habis",
+        count: lowStockAlerts.length,
+        href: "/management/products?filter=low-stock",
+        severity: "high" as const,
+      });
+    }
+
+    // TODO: Add refund pending alert when refund API is available
+    // TODO: Add QRIS pending alert when payment API is available
+
+    return result;
+  }, [lowStockAlerts]);
 
   return (
-    <div className="flex flex-col gap-8">
-      <OnboardingTooltip />
-      <Breadcrumbs />
-      <header className="rounded-2xl border border-border bg-card p-8 shadow-sm">
-        <Badge variant="secondary" className="w-fit uppercase tracking-wide">Dashboard</Badge>
-        <h1 className="mt-3 text-2xl font-semibold">
-          Selamat datang, {userName}
-          {currentOutlet && <span className="text-muted-foreground"> - {currentOutlet.name}</span>}
-        </h1>
-        <p className="text-muted-foreground">
-          Pusat navigasi untuk semua menu utama aplikasi{currentOutlet ? ` di ${currentOutlet.name}` : ''}.
-        </p>
-        <div className="mt-4 flex gap-3">
-          <Button asChild>
-            <Link href="/cashier" className="gap-2">
-              Mulai Transaksi
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+    <>
+      <div className="flex flex-col gap-6 pb-20 lg:gap-8 lg:pb-10">
+        {/* Header */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-foreground lg:text-2xl">
+                Dashboard
+              </h1>
+              <Badge
+                variant="outline"
+                className="text-xs uppercase tracking-wider"
+              >
+                {role}
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {currentOutlet ? (
+                <>
+                  Selamat datang,{" "}
+                  <span className="font-medium">{userName}</span> •{" "}
+                  {currentOutlet.name}
+                </>
+              ) : (
+                "Pilih outlet untuk memulai"
+              )}
+            </p>
+          </div>
+          {currentOutlet && (
+            <Button asChild className="hidden lg:flex">
+              <Link href="/cashier" className="gap-2">
+                Mulai Transaksi
+                <ArrowRight className="h-4 w-4 stroke-[1.5]" />
+              </Link>
+            </Button>
+          )}
         </div>
-      </header>
 
-      <section>
-        <MotionList variants={containerCards} className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-          <MotionItem variants={cardVariant} className="flex justify-center px-2">
-            <SummaryCard title="Penjualan Hari Ini" value={`${todayCount} transaksi`} icon={<ReceiptText className="h-5 w-5" />} />
-          </MotionItem>
-          {quickActions
-            .filter((a) => {
-              if ((a.href?.startsWith('/management') || a.href?.startsWith('/reports')) && !['ADMIN', 'OWNER'].includes(role)) return false;
-              return true;
-            })
-            .map((a) => (
-              <MotionItem key={a.href} variants={cardVariant} className="flex justify-center px-2">
-                <Link href={a.href} className="w-full">
-                  <Card className="p-6 w-full hover:shadow-lg transition h-full">
-                    <CardHeader>
-                      <div className="flex items-center gap-3">
-                        <div className={`rounded-md p-3 ${ACCENT_CLASSES[a.accent]?.icon || 'bg-off-white text-primary'}`}>{a.icon}</div>
-                        <div>
-                          <CardTitle>{a.title}</CardTitle>
-                          <CardDescription className="text-sm text-muted-foreground">{a.description}</CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-3 flex justify-end">
-                      <span className="inline-flex items-center gap-2 text-sm">Lihat <ArrowRight className="h-4 w-4" /></span>
-                    </CardContent>
-                  </Card>
+        {!currentOutlet ? (
+          <div className="rounded-xl border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-8 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Pilih outlet dari menu di atas untuk melihat dashboard
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Operational Overview */}
+            <section>
+              <OperationalOverview data={operationalData} />
+            </section>
+
+            {/* Quick Actions */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Aksi Cepat
+              </h2>
+              <QuickActions userRole={role} />
+            </section>
+
+            {/* Alerts */}
+            {alerts.length > 0 && (
+              <section>
+                <AlertsSection alerts={alerts} />
+              </section>
+            )}
+
+            {/* Mini Charts */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Analitik Hari Ini
+              </h2>
+              <MiniCharts
+                salesData={salesChartData}
+                topProducts={topProductsData}
+                isLoading={isSummaryLoading}
+              />
+            </section>
+
+            {/* Mobile CTA */}
+            <section className="lg:hidden">
+              <Button asChild className="w-full" size="lg">
+                <Link href="/cashier" className="gap-2">
+                  Mulai Transaksi
+                  <ArrowRight className="h-4 w-4 stroke-[1.5]" />
                 </Link>
-              </MotionItem>
-            ))}
-        </MotionList>
+              </Button>
+            </section>
+          </>
+        )}
+      </div>
 
-        <DashboardWidgets />
-      </section>
-    </div>
+      {/* Mobile Dock */}
+      <MobileDock userRole={role} />
+    </>
   );
 }
-
-// (auth helper moved to server/auth.ensureAuthenticatedOrRedirect)

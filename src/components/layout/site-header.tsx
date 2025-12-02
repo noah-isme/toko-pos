@@ -5,12 +5,10 @@ import Link from "next/link";
 import { LogIn, LogOut, Menu } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
-import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { MotionButton as Button } from "@/components/ui/button";
 import MotionList, { MotionItem } from "@/components/ui/motion-list";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -22,7 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { OutletSelector } from "@/components/ui/outlet-selector";
 import { useOutlet } from "@/lib/outlet-context";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -94,9 +91,6 @@ export function SiteHeader({ className }: { className?: string }) {
   }, [session?.user?.name, session?.user?.email]);
   const shiftButtonDisabled =
     isShiftLoading || isOpeningShift || isClosingShift || !currentOutlet;
-  const shiftStatusLabel = activeShift
-    ? `Shift aktif · ${format(new Date(activeShift.openTime), "HH:mm")}`
-    : "Shift belum dibuka";
   const shiftButtonLabel = activeShift ? "Tutup Shift" : "Buka Shift";
 
   const handleShiftButton = (action: "open" | "close") => {
@@ -133,11 +127,12 @@ export function SiteHeader({ className }: { className?: string }) {
   return (
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-50 border-b border-border bg-white/95 backdrop-blur",
+        "fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/80",
+        "shadow-[0_1px_3px_rgba(0,0,0,0.04)]",
         className,
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4">
+      <div className="mx-auto flex h-14 w-full max-w-screen-2xl items-center justify-between gap-4 px-4 lg:px-6">
         <div className="flex items-center gap-3">
           {isAuthenticated && (
             <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -179,12 +174,12 @@ export function SiteHeader({ className }: { className?: string }) {
               </DialogContent>
             </Dialog>
           )}
-          <Link href="/" className="text-lg font-semibold">
+          <Link href="/" className="text-base font-semibold tracking-tight">
             Toko POS
           </Link>
           {isAuthenticated ? (
-            <nav className="hidden gap-1 lg:flex" aria-label="Navigasi utama">
-              <MotionList as="div" className="flex gap-1">
+            <nav className="hidden gap-0.5 lg:flex" aria-label="Navigasi utama">
+              <MotionList as="div" className="flex gap-0.5">
                 {navItems.map((item) => {
                   const isActive = pathname?.startsWith(item.href);
                   return (
@@ -195,6 +190,8 @@ export function SiteHeader({ className }: { className?: string }) {
                     >
                       <Button
                         variant={isActive ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-8 text-sm font-normal"
                         asChild
                       >
                         <Link href={item.href}>{item.label}</Link>
@@ -208,23 +205,15 @@ export function SiteHeader({ className }: { className?: string }) {
         </div>
 
         {isAuthenticated ? (
-          <div className="flex items-center gap-3 text-sm">
-            <div className="hidden text-right lg:flex lg:flex-col">
-              <span className="font-medium text-foreground">
-                {session?.user?.name ?? session?.user?.email ?? "Kasir"}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {currentOutlet?.name ?? "Outlet belum dipilih"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <OutletSelector />
-              <Separator orientation="vertical" className="hidden lg:block" />
-              <div className="hidden flex-col text-right lg:flex">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Jam kasir
+          <div className="flex items-center gap-2 text-sm lg:gap-3">
+            <OutletSelector />
+            <div className="hidden items-center gap-2 lg:flex">
+              <div className="h-8 w-px bg-border" />
+              <div className="flex flex-col">
+                <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Jam
                 </span>
-                <span className="font-semibold text-foreground">
+                <span className="text-sm font-semibold tabular-nums text-foreground">
                   {mounted
                     ? time.toLocaleTimeString("id-ID", {
                         hour: "2-digit",
@@ -233,17 +222,27 @@ export function SiteHeader({ className }: { className?: string }) {
                     : "--:--"}
                 </span>
               </div>
-              <Separator orientation="vertical" className="hidden lg:block" />
-              <div className="hidden flex-col items-end gap-1 lg:flex">
-                <Badge
-                  variant={activeShift ? "outline" : "secondary"}
-                  className="text-xs font-medium"
-                >
-                  {shiftStatusLabel}
-                </Badge>
+            </div>
+            <div className="hidden items-center gap-2 lg:flex">
+              <div className="h-8 w-px bg-border" />
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      activeShift
+                        ? "animate-pulse bg-emerald-500"
+                        : "bg-slate-300",
+                    )}
+                  />
+                  <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Shift
+                  </span>
+                </div>
                 <Button
-                  variant="outline"
+                  variant={activeShift ? "outline" : "default"}
                   size="sm"
+                  className="h-7 text-xs"
                   disabled={shiftButtonDisabled}
                   onClick={() =>
                     handleShiftButton(activeShift ? "close" : "open")
@@ -253,22 +252,22 @@ export function SiteHeader({ className }: { className?: string }) {
                 </Button>
               </div>
             </div>
-            <Separator orientation="vertical" className="hidden lg:block" />
-            <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-semibold uppercase text-foreground sm:flex">
+            <div className="hidden h-8 w-px bg-border lg:block" />
+            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-foreground lg:flex">
               {initials}
             </div>
-            <Separator orientation="vertical" className="hidden sm:block" />
+            <div className="hidden h-8 w-px bg-border sm:block" />
             <Button
-              variant="pill"
+              variant="ghost"
               size="sm"
               onClick={() => {
                 void signOut({ callbackUrl: "/auth/login" });
               }}
-              className="min-h-[40px]"
+              className="h-8 gap-1.5 text-xs"
               aria-label="Keluar dari aplikasi"
             >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Keluar</span>
+              <LogOut className="h-3.5 w-3.5 stroke-[1.5]" />
+              <span className="hidden lg:inline">Keluar</span>
             </Button>
           </div>
         ) : (
@@ -276,19 +275,18 @@ export function SiteHeader({ className }: { className?: string }) {
             <Button
               variant="ghost"
               size="sm"
-              className="hidden lg:flex"
+              className="hidden h-8 text-xs lg:flex"
               asChild
             >
               <Link href="/demo/cashier">Coba Demo</Link>
             </Button>
             <Button
-              variant="pill"
               size="sm"
               onClick={() => router.push("/auth/login")}
-              className="min-h-[40px]"
+              className="h-8 gap-1.5 text-xs"
               aria-label="Masuk ke aplikasi"
             >
-              <LogIn className="h-4 w-4" />
+              <LogIn className="h-3.5 w-3.5 stroke-[1.5]" />
               Masuk
             </Button>
           </div>
