@@ -30,6 +30,7 @@ export const productSummarySchema = z.object({
   promoEnd: z.string().nullable(),
   isTaxable: z.boolean(),
   taxRate: z.number().nullable(),
+  minStock: z.number(),
 });
 
 export const productListOutputSchema = z.array(productSummarySchema);
@@ -77,6 +78,7 @@ export const productUpsertInputSchema = z.object({
     .min(0, { message: "Tarif PPN minimal 0%" })
     .max(100, { message: "Tarif PPN maksimal 100%" })
     .optional(),
+  minStock: z.number().int().min(0).default(0),
 });
 
 export const productUpsertOutputSchema = z.object({

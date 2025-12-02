@@ -1,5 +1,5 @@
 {
-  "name": "kios-pos",
+  "name": "toko-pos",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -18,7 +18,8 @@
     "test:e2e": "playwright test",
     "auth:post": "node ./scripts/auth-post.mjs",
     "test:e2e:ui": "playwright test tests/e2e/ui --project=chromium",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "test": "pnpm test:unit && pnpm exec playwright test"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",

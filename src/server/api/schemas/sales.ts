@@ -201,6 +201,7 @@ export const receiptSummarySchema = z.object({
   totalNet: z.number(),
   paymentMethods: z.array(z.nativeEnum(PaymentMethod)),
   status: z.string(),
+  shiftOpenedAt: z.string().nullable(),
 });
 
 export const receiptListOutputSchema = z.array(receiptSummarySchema);

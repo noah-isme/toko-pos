@@ -5,14 +5,26 @@ import Link from "next/link";
 import { LogIn, LogOut, Menu } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { toast } from "sonner";
 
 import { MotionButton as Button } from "@/components/ui/button";
 import MotionList, { MotionItem } from "@/components/ui/motion-list";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { OutletSelector } from "@/components/ui/outlet-selector";
 import { useOutlet } from "@/lib/outlet-context";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const navItems = [
   { href: "/cashier", label: "Kasir" },
@@ -24,10 +36,22 @@ export function SiteHeader({ className }: { className?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, status } = useSession();
-  const { currentOutlet } = useOutlet();
+  const {
+    currentOutlet,
+    activeShift,
+    isShiftLoading,
+    openShift,
+    closeShift,
+    refreshShift,
+    isOpeningShift,
+    isClosingShift,
+  } = useOutlet();
   const [time, setTime] = React.useState(() => new Date());
   const [mounted, setMounted] = React.useState(false);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const [shiftDialogOpen, setShiftDialogOpen] = React.useState(false);
+  const [shiftAction, setShiftAction] = React.useState<"open" | "close">("open");
+  const [shiftCashInput, setShiftCashInput] = React.useState("");
 
   React.useEffect(() => {
     const id = setInterval(() => setTime(new Date()), 1000);
@@ -66,6 +90,42 @@ export function SiteHeader({ className }: { className?: string }) {
     }
     return "KP";
   }, [session?.user?.name, session?.user?.email]);
+  const shiftButtonDisabled =
+    isShiftLoading || isOpeningShift || isClosingShift || !currentOutlet;
+  const shiftStatusLabel = activeShift
+    ? `Shift aktif · ${format(new Date(activeShift.openTime), "HH:mm")}`
+    : "Shift belum dibuka";
+  const shiftButtonLabel = activeShift ? "Tutup Shift" : "Buka Shift";
+
+  const handleShiftButton = (action: "open" | "close") => {
+    setShiftAction(action);
+    setShiftCashInput("");
+    setShiftDialogOpen(true);
+  };
+
+  const handleShiftSubmit = async () => {
+    const value = Number(shiftCashInput || 0);
+    if (Number.isNaN(value) || value < 0) {
+      toast.error("Nominal kas tidak valid.");
+      return;
+    }
+
+    try {
+      if (shiftAction === "open") {
+        await openShift(value);
+        toast.success("Shift dibuka.");
+      } else {
+        await closeShift(value);
+        toast.success("Shift ditutup.");
+      }
+      setShiftDialogOpen(false);
+      setShiftCashInput("");
+      await refreshShift();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Gagal memproses shift.";
+      toast.error(message);
+    }
+  };
 
   return (
     <header
@@ -157,6 +217,20 @@ export function SiteHeader({ className }: { className?: string }) {
                     : "--:--"}
                 </span>
               </div>
+              <Separator orientation="vertical" className="hidden lg:block" />
+              <div className="hidden flex-col items-end gap-1 lg:flex">
+                <Badge variant={activeShift ? "outline" : "secondary"} className="text-xs font-medium">
+                  {shiftStatusLabel}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={shiftButtonDisabled}
+                  onClick={() => handleShiftButton(activeShift ? "close" : "open")}
+                >
+                  {shiftButtonLabel}
+                </Button>
+              </div>
             </div>
             <Separator orientation="vertical" className="hidden lg:block" />
             <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-semibold uppercase text-foreground sm:flex">
@@ -199,6 +273,52 @@ export function SiteHeader({ className }: { className?: string }) {
           </div>
         )}
       </div>
+      <Dialog
+        open={shiftDialogOpen}
+        onOpenChange={(open) => {
+          if (isOpeningShift || isClosingShift) return;
+          setShiftDialogOpen(open);
+        }}
+      >
+        <DialogContent className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>
+              {shiftAction === "open" ? "Buka Shift Kasir" : "Tutup Shift Kasir"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="header-shift-cash">
+              Kas {shiftAction === "open" ? "awal" : "akhir"}
+            </Label>
+            <Input
+              id="header-shift-cash"
+              type="number"
+              min={0}
+              step={1000}
+              value={shiftCashInput}
+              onChange={(event) => setShiftCashInput(event.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => setShiftDialogOpen(false)}
+              disabled={isOpeningShift || isClosingShift}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              onClick={handleShiftSubmit}
+              disabled={isOpeningShift || isClosingShift}
+            >
+              {shiftAction === "open" ? "Buka Shift" : "Tutup Shift"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

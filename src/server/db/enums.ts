@@ -1,1 +1,1 @@
-export { Prisma, PaymentMethod, Role } from "@prisma/client";
+export { Prisma, PaymentMethod, Role, SaleStatus } from "@prisma/client";

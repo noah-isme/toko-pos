@@ -1,6 +1,6 @@
-# Panduan Deploy Kios POS
+# Panduan Deploy Toko POS
 
-Panduan lengkap untuk deploy Kios POS ke production.
+Panduan lengkap untuk deploy Toko POS ke production.
 
 ## Daftar Isi
 
@@ -85,7 +85,7 @@ Atau gunakan GitHub integration untuk auto-deploy pada setiap push ke main branc
 1. Buka [Supabase Dashboard](https://app.supabase.com)
 2. Klik "New Project"
 3. Isi detail:
-   - **Name**: kios-pos
+   - **Name**: toko-pos
    - **Database Password**: Generate password yang kuat
    - **Region**: Pilih region terdekat dengan users
 4. Tunggu project provisioning (~2 menit)

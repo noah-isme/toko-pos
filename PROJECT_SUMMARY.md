@@ -1,13 +1,13 @@
-# Ringkasan Proyek Kios POS
+# Ringkasan Proyek Toko POS
 
 ## Gambaran Umum
 
-Kios POS adalah sistem Point of Sale (POS) modern untuk retail yang dibangun dengan teknologi web terkini. Proyek ini menyediakan solusi lengkap untuk mengelola penjualan, inventori, dan laporan bisnis retail.
+Toko POS adalah sistem Point of Sale (POS) modern untuk retail yang dibangun dengan teknologi web terkini. Proyek ini menyediakan solusi lengkap untuk mengelola penjualan, inventori, dan laporan bisnis retail.
 
 ### Status Proyek
 
 **Versi**: 0.1.0 (MVP)  
-**Status**: Development/Production Ready  
+**Status**: Phase 1 Stabil (shift kasir + alert stok aktif)  
 **Tanggal Rilis Pertama**: Oktober 2025  
 **Lisensi**: -
 
@@ -55,6 +55,25 @@ Kios POS adalah sistem Point of Sale (POS) modern untuk retail yang dibangun den
 │  │  Stock   │  │ Payments │  │  Roles   │  │
 │  └──────────┘  └──────────┘  └──────────┘  │
 └─────────────────────────────────────────────┘
+```
+
+### Alur Shift → Penjualan → Alert → Audit
+
+```mermaid
+flowchart LR
+  OpenShift[Buka Shift (CashSession)] --> RecordSale[Record Sale]
+  RecordSale --> Evaluate{Evaluasi Low Stock}
+  Evaluate -- Ya --> Alert[LowStockAlert Persist]
+  Evaluate -- Tidak --> UpdateInventory[Inventory Update]
+  Alert --> Dashboard[Widget Dashboard & Products Table]
+  Dashboard --> Ack[Acknowledge]
+  Ack --> ActivityLogTrigger[ActivityLog LOW_STOCK_TRIGGER]
+  RecordSale --> AuditSale[ActivityLog SALE_RECORD]
+  RecordSale --> AfterSales[Refund / Void]
+  AfterSales --> Restock[Stok dikembalikan + Audit SALE_REFUND/VOID]
+  Restock --> Evaluate
+  OpenShift --> CloseShift[Tutup Shift + Difference]
+  CloseShift --> AuditShift[ActivityLog SHIFT_CLOSE]
 ```
 
 ### Key Technologies
@@ -172,8 +191,9 @@ TaxSetting (Pengaturan PPN)
 - ✅ Penyesuaian stok (stock adjustment)
 - ✅ Transfer stok antar outlet
 - ✅ Stock opname (physical inventory)
-- ✅ History mutasi stok (audit trail)
-- ✅ Alert low stock (planned)
+- ✅ History mutasi stok & ActivityLog
+- ✅ Evaluasi `minStock` dan penyimpanan `LowStockAlert`
+- ✅ Widget dashboard + toggle tabel produk untuk SKU kritis
 
 **Technical Implementation**:
 - StockMovement table untuk audit trail
@@ -187,10 +207,10 @@ TaxSetting (Pengaturan PPN)
 **Fitur**:
 - ✅ Laporan harian (daily summary)
 - ✅ Total penjualan per hari
-- ✅ Jumlah transaksi
+- ✅ Jumlah transaksi & total item
 - ✅ Breakdown per payment method
-- ✅ Total item terjual
 - ✅ Estimasi float keesokan hari
+- ✅ ActivityLog untuk SHIFT_OPEN/CLOSE, SALE_RECORD/VOID/REFUND, LOW_STOCK_TRIGGER
 - ⏳ Laporan bulanan (planned)
 - ⏳ Laporan per produk (planned)
 - ⏳ Export ke Excel (planned)
@@ -282,7 +302,7 @@ TaxSetting (Pengaturan PPN)
 ## File dan Folder Penting
 
 ```
-kios-pos/
+toko-pos/
 ├── src/
 │   ├── app/                    # Next.js App Router pages
 │   │   ├── api/               # API routes
@@ -331,6 +351,17 @@ kios-pos/
 └── README.md                 # Dokumentasi utama
 ```
 
+## Test Matrix (Phase 1 Stabil)
+
+| Fitur / Area | Unit Tests | E2E / Integrasi |
+|--------------|------------|-----------------|
+| Audit log writer (`writeAuditLog`) | `tests/unit/services.audit.test.ts` | - |
+| Low-stock evaluation & dedup | `tests/unit/services.lowStock.test.ts` | `tests/e2e/dashboard.lowstock.spec.ts` |
+| Shift enforcement middleware | `tests/unit/middleware.shift.test.ts` | `tests/e2e/cashier.shift.spec.ts` |
+| Refund & void stok/audit | `tests/unit/sales.refund_void.test.ts` | `tests/e2e/cashier.refund_void.spec.ts` |
+| Produk minStock UI + filter | - | `tests/e2e/products.minstock.spec.ts` |
+| Cashier happy-path + receipts | Covered oleh unit service & seed | `tests/e2e/cashier.shift.spec.ts`, `tests/e2e/cashier.refund_void.spec.ts` |
+
 ## Metrics & KPIs
 
 ### Performance Targets
@@ -368,10 +399,11 @@ kios-pos/
 - [x] Demo publik read-only dengan mock mode otomatis
 - [x] Tabel produk berbasis TanStack dengan ekspor & resize kolom
 - [x] Alur refund/void kasir dengan konfirmasi stok
+- [x] Shift kasir + selisih kas + ActivityLog
+- [x] Low stock alerts + widget dashboard + filter tabel
 - [ ] Laporan bulanan & tahunan
 - [ ] Export laporan ke Excel/PDF
 - [ ] Dashboard analytics dengan charts
-- [ ] Low stock alerts
 - [ ] User management UI
 - [ ] Audit log untuk admin actions
 - [ ] Product image upload
@@ -402,8 +434,8 @@ kios-pos/
 
 ```bash
 # Clone & install
-git clone https://github.com/noah-isme/kios-pos.git
-cd kios-pos
+git clone https://github.com/noah-isme/toko-pos.git
+cd toko-pos
 pnpm install
 
 # Setup environment

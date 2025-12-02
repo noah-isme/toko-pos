@@ -9,7 +9,7 @@ import type { PaymentMethod } from "@prisma/client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useActiveOutlet } from "@/hooks/use-active-outlet";
+import { useOutlet } from "@/lib/outlet-context";
 import { Badge } from "@/components/ui/badge";
 import { MotionButton as Button } from "@/components/ui/button";
 import {
@@ -86,8 +86,21 @@ const calculateItemDiscount = (item: CartItem) =>
   (item.price * item.quantity * item.discountPercent) / 100;
 
 export default function CashierPage() {
-  const { activeOutlet, outlets, setActiveOutlet } = useActiveOutlet();
-  const activeOutletId = activeOutlet?.id;
+  const {
+    currentOutlet,
+    userOutlets,
+    setCurrentOutlet,
+    activeShift,
+    isShiftLoading,
+    openShift,
+    closeShift,
+    refreshShift,
+    isOpeningShift,
+    isClosingShift,
+  } = useOutlet();
+  const activeOutlet = currentOutlet;
+  const outlets = userOutlets.map((entry) => entry.outlet);
+  const activeOutletId = activeOutlet?.id ?? null;
 
   const [barcode, setBarcode] = useState("");
   const [manualDiscount, setManualDiscount] = useState(0);
@@ -106,6 +119,7 @@ export default function CashierPage() {
   const [checkoutState, setCheckoutState] = useState<CheckoutState>("idle");
   const [qrisCode, setQrisCode] = useState<string | null>(null);
   const [isExpressMode, setIsExpressMode] = useState(false);
+  const [hasPromptedShift, setHasPromptedShift] = useState(false);
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const qrisTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,19 +140,7 @@ export default function CashierPage() {
   const recentSales = api.sales.listRecent.useQuery({ limit: 5 });
   const voidSaleMutation = api.sales.voidSale.useMutation();
   const refundSaleMutation = api.sales.refundSale.useMutation();
-  const {
-    data: activeSessionData,
-    refetch: refetchCashSession,
-    isLoading: isCashSessionLoading,
-    isFetching: isCashSessionFetching,
-  } = api.cashSessions.getActive.useQuery(
-    { outletId: activeOutletId ?? "" },
-    { enabled: Boolean(activeOutletId), refetchInterval: 60_000 },
-  );
-  const openCashSession = api.cashSessions.open.useMutation();
-  const closeCashSession = api.cashSessions.close.useMutation();
-
-  type CloseSessionResult = Awaited<ReturnType<typeof closeCashSession.mutateAsync>>;
+  type CloseSessionResult = Awaited<ReturnType<typeof closeShift>>;
 
   type RecentSale = NonNullable<typeof recentSales.data>[number];
 
@@ -154,8 +156,7 @@ export default function CashierPage() {
   const [openingCashInput, setOpeningCashInput] = useState("");
   const [closingCashInput, setClosingCashInput] = useState("");
   const [closeSummary, setCloseSummary] = useState<CloseSessionResult | null>(null);
-  const activeSession = activeSessionData ?? null;
-  const isShiftLoading = isCashSessionLoading || isCashSessionFetching;
+  const activeSession = activeShift ?? null;
 
   useEffect(() => {
     if (!catalogQuery.data?.length) return;
@@ -178,8 +179,8 @@ export default function CashierPage() {
 
   useEffect(() => {
     if (!activeOutletId) return;
-    void refetchCashSession();
-  }, [activeOutletId, refetchCashSession]);
+    void refreshShift();
+  }, [activeOutletId, refreshShift]);
 
   useEffect(() => {
     if (!isOpenShiftModalOpen) {
@@ -193,6 +194,19 @@ export default function CashierPage() {
       setCloseSummary(null);
     }
   }, [isCloseShiftModalOpen]);
+
+  useEffect(() => {
+    if (isShiftLoading) {
+      return;
+    }
+    if (!activeSession && activeOutletId && !hasPromptedShift) {
+      setOpenShiftModalOpen(true);
+      setHasPromptedShift(true);
+    }
+    if (activeSession && hasPromptedShift) {
+      setHasPromptedShift(false);
+    }
+  }, [activeSession, activeOutletId, hasPromptedShift, isShiftLoading]);
 
   useEffect(() => {
     if (!receiptPreview) {
@@ -219,8 +233,6 @@ export default function CashierPage() {
   useEffect(() => () => clearQrisTimeout(), [clearQrisTimeout]);
 
   const isProcessingAfterSales = voidSaleMutation.isPending || refundSaleMutation.isPending;
-  const isOpeningShift = openCashSession.isPending;
-  const isClosingShift = closeCashSession.isPending;
 
   const handleOpenShift = async () => {
     if (!activeOutletId) {
@@ -236,14 +248,11 @@ export default function CashierPage() {
     }
 
     try {
-      await openCashSession.mutateAsync({
-        outletId: activeOutletId,
-        openingCash: value,
-      });
+      await openShift(value);
       toast.success("Shift kasir berhasil dibuka.");
       setOpenShiftModalOpen(false);
       setOpeningCashInput("");
-      await refetchCashSession();
+      await refreshShift();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal membuka shift.";
       toast.error(message);
@@ -264,13 +273,10 @@ export default function CashierPage() {
     }
 
     try {
-      const result = await closeCashSession.mutateAsync({
-        sessionId: activeSession.id,
-        closingCash: value,
-      });
+      const result = await closeShift(value);
       setCloseSummary(result);
       toast.success("Shift kasir ditutup.");
-      await refetchCashSession();
+      await refreshShift();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gagal menutup shift.";
       toast.error(message);
@@ -294,12 +300,13 @@ export default function CashierPage() {
     const { sale, type, note } = afterSalesAction;
     const trimmedNote = note.trim();
 
+    if (trimmedNote.length < 3) {
+      toast.error("Alasan minimal 3 karakter.");
+      return;
+    }
+
     try {
       if (type === "void") {
-        if (trimmedNote.length < 3) {
-          toast.error("Alasan void minimal 3 karakter.");
-          return;
-        }
         const result = await voidSaleMutation.mutateAsync({
           saleId: sale.id,
           reason: trimmedNote,
@@ -309,7 +316,7 @@ export default function CashierPage() {
       } else {
         const result = await refundSaleMutation.mutateAsync({
           saleId: sale.id,
-          reason: trimmedNote.length > 0 ? trimmedNote : undefined,
+          reason: trimmedNote,
           amount: sale.totalNet,
         });
         toast.success(
@@ -801,7 +808,12 @@ export default function CashierPage() {
                   id="outlet"
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   value={activeOutletId ?? ""}
-                  onChange={(event) => setActiveOutlet(event.target.value)}
+            onChange={(event) => {
+              const selected = outlets.find((outlet) => outlet.id === event.target.value);
+              if (selected) {
+                setCurrentOutlet(selected);
+              }
+            }}
                 >
                   {outlets.map((outlet) => (
                     <option key={outlet.id} value={outlet.id}>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useActiveOutlet } from "@/hooks/use-active-outlet";
+import { useOutlet } from "@/lib/outlet-context";
 import { Badge } from "@/components/ui/badge";
 import { MotionButton as Button } from "@/components/ui/button";
 import {
@@ -37,11 +37,14 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 export default function ReceiptHistoryPage() {
-  const { activeOutlet, activeOutletId, setActiveOutlet, outlets } = useActiveOutlet();
-  const [voidReason, setVoidReason] = useState("");
-  const [selectedSale, setSelectedSale] = useState<{
-    id: string;
-    receiptNumber: string;
+  const { currentOutlet, userOutlets, setCurrentOutlet, activeShift } = useOutlet();
+  const outlets = userOutlets.map((entry) => entry.outlet);
+  const activeOutlet = currentOutlet;
+  const activeOutletId = activeOutlet?.id ?? null;
+  const [actionReason, setActionReason] = useState("");
+  const [afterSalesAction, setAfterSalesAction] = useState<{
+    type: "void" | "refund";
+    sale: { id: string; receiptNumber: string; totalNet: number };
   } | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
@@ -51,6 +54,7 @@ export default function ReceiptHistoryPage() {
   );
   const printReceipt = api.sales.printReceipt.useMutation();
   const voidSale = api.sales.voidSale.useMutation();
+  const refundSale = api.sales.refundSale.useMutation();
 
   const isLoading = receiptsQuery.isLoading || receiptsQuery.isFetching;
   const receipts = useMemo(() => receiptsQuery.data ?? [], [receiptsQuery.data]);
@@ -77,35 +81,48 @@ export default function ReceiptHistoryPage() {
     }
   };
 
-  const handleVoid = (saleId: string, receiptNumber: string) => {
-    setSelectedSale({ id: saleId, receiptNumber });
-    setVoidReason("");
+  const openAfterSalesDialog = (
+    sale: { id: string; receiptNumber: string; totalNet: number },
+    type: "void" | "refund",
+  ) => {
+    setAfterSalesAction({ type, sale });
+    setActionReason("");
   };
 
-  const confirmVoid = async () => {
-    if (!selectedSale) return;
-    const reason = voidReason.trim();
+  const handleAfterSalesConfirm = async () => {
+    if (!afterSalesAction) return;
+    const reason = actionReason.trim();
 
     if (reason.length < 3) {
-      toast.error("Alasan pembatalan minimal 3 karakter.");
+      toast.error("Alasan minimal 3 karakter.");
       return;
     }
 
     try {
-      await voidSale.mutateAsync({ saleId: selectedSale.id, reason });
-      toast.success(`Struk ${selectedSale.receiptNumber} dibatalkan.`);
-      setSelectedSale(null);
-      setVoidReason("");
+      if (afterSalesAction.type === "void") {
+        await voidSale.mutateAsync({ saleId: afterSalesAction.sale.id, reason });
+        toast.success(`Struk ${afterSalesAction.sale.receiptNumber} dibatalkan.`);
+      } else {
+        await refundSale.mutateAsync({
+          saleId: afterSalesAction.sale.id,
+          reason,
+          amount: afterSalesAction.sale.totalNet,
+        });
+        toast.success(`Refund ${afterSalesAction.sale.receiptNumber} berhasil.`);
+      }
+      setAfterSalesAction(null);
+      setActionReason("");
       await receiptsQuery.refetch();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal membatalkan transaksi.";
+      const message = error instanceof Error ? error.message : "Gagal memproses tindakan.";
       toast.error(message);
     }
   };
 
-  const resetVoidDialog = () => {
-    setSelectedSale(null);
-    setVoidReason("");
+  const resetAfterSalesDialog = () => {
+    if (voidSale.isPending || refundSale.isPending) return;
+    setAfterSalesAction(null);
+    setActionReason("");
   };
 
   return (
@@ -148,7 +165,12 @@ export default function ReceiptHistoryPage() {
             id="outlet"
             className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             value={activeOutletId ?? ""}
-            onChange={(event) => setActiveOutlet(event.target.value)}
+            onChange={(event) => {
+              const selected = outlets.find((outlet) => outlet.id === event.target.value);
+              if (selected) {
+                setCurrentOutlet(selected);
+              }
+            }}
           >
             {outlets.map((outlet) => (
               <option key={outlet.id} value={outlet.id}>
@@ -172,6 +194,7 @@ export default function ReceiptHistoryPage() {
                   <TableHead className="min-w-[160px]">Nomor Struk</TableHead>
                   <TableHead className="w-40">Waktu</TableHead>
                   <TableHead className="w-40">Kasir</TableHead>
+                  <TableHead className="w-40">Shift</TableHead>
                   <TableHead className="w-32 text-right">Total</TableHead>
                   <TableHead className="w-40">Metode</TableHead>
                   <TableHead className="w-32 text-center">Aksi</TableHead>
@@ -214,6 +237,14 @@ export default function ReceiptHistoryPage() {
                         </TableCell>
                         <TableCell>{new Date(sale.soldAt).toLocaleString("id-ID")}</TableCell>
                         <TableCell>{sale.cashierName ?? "-"}</TableCell>
+                        <TableCell>
+                          {sale.shiftOpenedAt
+                            ? new Date(sale.shiftOpenedAt).toLocaleTimeString("id-ID", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "-"}
+                        </TableCell>
                         <TableCell className="text-right">{formatCurrency(sale.totalNet)}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -240,10 +271,37 @@ export default function ReceiptHistoryPage() {
                               type="button"
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleVoid(sale.id, sale.receiptNumber)}
+                              onClick={() =>
+                                openAfterSalesDialog(
+                                  {
+                                    id: sale.id,
+                                    receiptNumber: sale.receiptNumber,
+                                    totalNet: sale.totalNet,
+                                  },
+                                  "void",
+                                )
+                              }
                               disabled={!isCompleted || voidSale.isPending}
                             >
                               Void
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                openAfterSalesDialog(
+                                  {
+                                    id: sale.id,
+                                    receiptNumber: sale.receiptNumber,
+                                    totalNet: sale.totalNet,
+                                  },
+                                  "refund",
+                                )
+                              }
+                              disabled={!isCompleted || refundSale.isPending}
+                            >
+                              Refund
                             </Button>
                           </div>
                         </TableCell>
@@ -257,40 +315,59 @@ export default function ReceiptHistoryPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(selectedSale)} onOpenChange={(open) => !open && resetVoidDialog()}>
+      <Dialog open={Boolean(afterSalesAction)} onOpenChange={(open) => !open && resetAfterSalesDialog()}>
         <DialogContent className="max-w-md">
-          {selectedSale ? (
+          {afterSalesAction ? (
             <>
               <DialogHeader>
-                <DialogTitle>Konfirmasi Void Struk</DialogTitle>
+                <DialogTitle>
+                  {afterSalesAction.type === "void" ? "Konfirmasi Void Struk" : "Konfirmasi Refund"}
+                </DialogTitle>
                 <DialogDescription>
-                  Pembatalan akan mengembalikan stok ke gudang. Masukkan alasan singkat untuk audit.
+                  {afterSalesAction.type === "void"
+                    ? "Pembatalan akan mengembalikan stok ke gudang. Masukkan alasan untuk audit."
+                    : "Refund akan mengembalikan dana dan stok. Cantumkan alasan singkat."}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 text-sm">
                 <div className="rounded-md border bg-muted/20 p-3">
-                  <p className="text-sm font-semibold text-foreground">{selectedSale.receiptNumber}</p>
-                  <p className="text-xs text-muted-foreground">Pastikan kasir telah menandatangani bukti pembatalan.</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {afterSalesAction.sale.receiptNumber}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Nominal {formatCurrency(afterSalesAction.sale.totalNet)}
+                  </p>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="void-reason" className="text-xs font-semibold text-muted-foreground">
-                    Alasan pembatalan
+                  <Label htmlFor="receipt-action-reason" className="text-xs font-semibold text-muted-foreground">
+                    Alasan
                   </Label>
                   <Input
-                    id="void-reason"
-                    value={voidReason}
-                    onChange={(event) => setVoidReason(event.target.value)}
+                    id="receipt-action-reason"
+                    value={actionReason}
+                    onChange={(event) => setActionReason(event.target.value)}
                     placeholder="Contoh: Produk rusak / transaksi ganda"
                   />
                 </div>
               </div>
               <DialogFooter className="gap-2">
-                <Button type="button" variant="outline" onClick={resetVoidDialog} disabled={voidSale.isPending}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetAfterSalesDialog}
+                  disabled={voidSale.isPending || refundSale.isPending}
+                >
                   Batal
                 </Button>
-                <Button type="button" onClick={() => void confirmVoid()} disabled={voidSale.isPending}>
-                  {voidSale.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Konfirmasi Void
+                <Button
+                  type="button"
+                  onClick={() => void handleAfterSalesConfirm()}
+                  disabled={voidSale.isPending || refundSale.isPending}
+                >
+                  {(voidSale.isPending || refundSale.isPending) ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {afterSalesAction.type === "void" ? "Konfirmasi Void" : "Konfirmasi Refund"}
                 </Button>
               </DialogFooter>
             </>
@@ -300,4 +377,3 @@ export default function ReceiptHistoryPage() {
     </div>
   );
 }
-

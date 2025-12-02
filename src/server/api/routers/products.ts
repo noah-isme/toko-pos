@@ -99,6 +99,7 @@ export const productsRouter = router({
           promoEnd: product.promoEnd?.toISOString() ?? null,
           isTaxable: product.isTaxable,
           taxRate: product.taxRate ? Number(product.taxRate) : null,
+          minStock: product.minStock,
         })),
       );
     }),
@@ -218,6 +219,8 @@ export const productsRouter = router({
             quantity: delta,
             note: input.note,
             createdById: userId,
+            productId: input.productId,
+            outletId: input.outletId,
           },
           include: {
             inventory: {
@@ -285,6 +288,7 @@ export const productsRouter = router({
           promoEnd: input.promoEnd ? new Date(input.promoEnd) : null,
           isTaxable: input.isTaxable ?? false,
           taxRate: toDecimal(input.taxRate ?? undefined),
+          minStock: input.minStock ?? 0,
         },
         create: {
           name: input.name,
@@ -303,6 +307,7 @@ export const productsRouter = router({
           promoEnd: input.promoEnd ? new Date(input.promoEnd) : undefined,
           isTaxable: input.isTaxable ?? false,
           taxRate: toDecimal(input.taxRate ?? undefined),
+          minStock: input.minStock ?? 0,
         },
       });
 

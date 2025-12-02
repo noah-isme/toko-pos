@@ -7,15 +7,42 @@
  * and daily summaries so the app starts with production-like data.
  */
 
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient, SaleStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
+const args = process.argv.slice(2);
+const shouldResetAdditive = args.includes("--reset");
 
 const toDecimal = (value) => new Prisma.Decimal(Number(value).toFixed(2));
 const toDate = (iso) => new Date(iso);
 const startOfUtcDay = (date) =>
   new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+const auditLogBuffer = [];
+
+function queueAuditLog(entry) {
+  auditLogBuffer.push(entry);
+}
+
+async function flushAuditLogs() {
+  for (const entry of auditLogBuffer) {
+    const createdAt = entry.createdAt
+      ? entry.createdAt instanceof Date
+        ? entry.createdAt
+        : toDate(entry.createdAt)
+      : new Date();
+    await prisma.activityLog.create({
+      data: {
+        ...entry,
+        createdAt,
+      },
+    });
+  }
+  if (auditLogBuffer.length) {
+    console.log(`📝 Seeded ${auditLogBuffer.length} activity logs`);
+  }
+  auditLogBuffer.length = 0;
+}
 
 const outletsData = [
   {
@@ -38,6 +65,7 @@ const taxSettingsData = [
 const categoriesData = [
   { slug: "beverages", name: "Minuman" },
   { slug: "bakery", name: "Roti & Patiseri" },
+  { slug: "snacks", name: "Camilan & Kudapan" },
   { slug: "fresh-produce", name: "Produk Segar" },
   { slug: "household", name: "Kebutuhan Rumah Tangga" },
 ];
@@ -48,6 +76,7 @@ const suppliersData = [
   { name: "PT Roti Sentosa", email: "order@rotisentosa.com", phone: "+62-21-3344-6677" },
   { name: "Harvest Farm Co", email: "hello@harvestfarm.co", phone: "+62-812-9090-4433" },
   { name: "Clean Home Supply", email: "support@cleanhomesupply.id", phone: "+62-813-2200-7788" },
+  { name: "PT Snackcraft Asia", email: "hello@snackcraft.id", phone: "+62-21-7788-6655" },
 ];
 
 const productsData = [
@@ -66,6 +95,7 @@ const productsData = [
     promoEnd: "2025-10-20T23:59:59.000Z",
     isTaxable: true,
     taxRate: 11,
+    minStock: 24,
   },
   {
     sku: "SKU-TEA-PREMIUM-50",
@@ -78,6 +108,7 @@ const productsData = [
     defaultDiscountPercent: 0,
     isTaxable: true,
     taxRate: 11,
+    minStock: 25,
   },
   {
     sku: "SKU-BREAD-WHOLEGRAIN",
@@ -89,6 +120,7 @@ const productsData = [
     costPrice: 18000,
     defaultDiscountPercent: 10,
     isTaxable: false,
+    minStock: 18,
   },
   {
     sku: "SKU-MILK-FRESH-1L",
@@ -100,6 +132,7 @@ const productsData = [
     costPrice: 21000,
     defaultDiscountPercent: 0,
     isTaxable: false,
+    minStock: 32,
   },
   {
     sku: "SKU-APPLE-FUJI-4P",
@@ -115,6 +148,7 @@ const productsData = [
     promoStart: "2025-10-01T00:00:00.000Z",
     promoEnd: "2025-10-15T23:59:59.000Z",
     isTaxable: false,
+    minStock: 20,
   },
   {
     sku: "SKU-FLOOR-LEMON-1L",
@@ -127,6 +161,32 @@ const productsData = [
     defaultDiscountPercent: 0,
     isTaxable: true,
     taxRate: 11,
+    minStock: 15,
+  },
+  {
+    sku: "SKU-SNACK-NORI-12",
+    name: "Keripik Rumput Laut 12g",
+    barcode: "8991234703001",
+    categorySlug: "snacks",
+    supplierName: "PT Snackcraft Asia",
+    price: 18000,
+    costPrice: 9500,
+    defaultDiscountPercent: 0,
+    isTaxable: false,
+    minStock: 12,
+  },
+  {
+    sku: "SKU-SOAP-HERBAL-500",
+    name: "Sabun Cair Herbal 500ml",
+    barcode: "8991234703200",
+    categorySlug: "household",
+    supplierName: "Clean Home Supply",
+    price: 42000,
+    costPrice: 26000,
+    defaultDiscountPercent: 0,
+    isTaxable: true,
+    taxRate: 11,
+    minStock: 14,
   },
 ];
 
@@ -134,7 +194,7 @@ const inventoryData = [
   {
     sku: "SKU-COFFEE-ARABICA-250",
     outletCode: "MAIN",
-    quantity: 58,
+    quantity: 54,
     costPrice: 54000,
     movements: [
       {
@@ -146,9 +206,9 @@ const inventoryData = [
       },
       {
         type: "SALE",
-        quantity: -2,
+        quantity: -6,
         reference: "POS-2025-1001",
-        note: "Sold via POS-2025-1001",
+        note: "Sold via POS-2025-1001 & POS-2025-3030",
         occurredAt: "2025-10-12T03:20:00.000Z",
       },
     ],
@@ -156,7 +216,7 @@ const inventoryData = [
   {
     sku: "SKU-COFFEE-ARABICA-250",
     outletCode: "BR2",
-    quantity: 51,
+    quantity: 48,
     costPrice: 54000,
     movements: [
       {
@@ -175,7 +235,7 @@ const inventoryData = [
       },
       {
         type: "SALE",
-        quantity: -1,
+        quantity: -4,
         reference: "POS-2025-2020",
         note: "Sold via POS-2025-2020",
         occurredAt: "2025-10-13T05:10:00.000Z",
@@ -185,7 +245,7 @@ const inventoryData = [
   {
     sku: "SKU-TEA-PREMIUM-50",
     outletCode: "MAIN",
-    quantity: 39,
+    quantity: 18,
     costPrice: 28500,
     movements: [
       {
@@ -197,10 +257,17 @@ const inventoryData = [
       },
       {
         type: "SALE",
-        quantity: -1,
+        quantity: -15,
+        reference: "POS-2025-1001",
+        note: "Promo bundling shift pagi",
+        occurredAt: "2025-10-12T06:30:00.000Z",
+      },
+      {
+        type: "SALE",
+        quantity: -7,
         reference: "POS-2025-1010",
-        note: "Sold via POS-2025-1010",
-        occurredAt: "2025-10-13T02:45:00.000Z",
+        note: "Kasir demo restock teh",
+        occurredAt: "2025-10-13T02:40:00.000Z",
       },
     ],
   },
@@ -295,7 +362,7 @@ const inventoryData = [
   {
     sku: "SKU-MILK-FRESH-1L",
     outletCode: "BR2",
-    quantity: 42,
+    quantity: 26,
     costPrice: 21500,
     movements: [
       {
@@ -307,10 +374,17 @@ const inventoryData = [
       },
       {
         type: "SALE",
-        quantity: -3,
+        quantity: -12,
         reference: "POS-2025-2015",
-        note: "Sold via POS-2025-2015",
+        note: "Bundling dairy & household",
         occurredAt: "2025-10-12T06:00:00.000Z",
+      },
+      {
+        type: "SALE",
+        quantity: -7,
+        reference: "POS-2025-2020",
+        note: "Subscription top-up",
+        occurredAt: "2025-10-13T05:05:00.000Z",
       },
     ],
   },
@@ -395,6 +469,115 @@ const inventoryData = [
       },
     ],
   },
+  {
+    sku: "SKU-SNACK-NORI-12",
+    outletCode: "MAIN",
+    quantity: 5,
+    costPrice: 10000,
+    movements: [
+      {
+        type: "INITIAL",
+        quantity: 30,
+        reference: "SNACK-LOAD-01",
+        note: "Snack rack replenishment",
+        occurredAt: "2025-10-11T23:10:00.000Z",
+      },
+      {
+        type: "SALE",
+        quantity: -20,
+        reference: "POS-2025-3030",
+        note: "Bundling camilan shift malam",
+        occurredAt: "2025-10-13T04:15:00.000Z",
+      },
+      {
+        type: "ADJUSTMENT",
+        quantity: -5,
+        reference: "ADJ-SNACK-001",
+        note: "Expired sachet dibuang",
+        occurredAt: "2025-10-13T05:30:00.000Z",
+      },
+    ],
+  },
+  {
+    sku: "SKU-SNACK-NORI-12",
+    outletCode: "BR2",
+    quantity: 22,
+    costPrice: 10000,
+    movements: [
+      {
+        type: "INITIAL",
+        quantity: 25,
+        reference: "SNACK-LOAD-02",
+        note: "Display cabang BSD",
+        occurredAt: "2025-10-12T00:45:00.000Z",
+      },
+      {
+        type: "PURCHASE",
+        quantity: 5,
+        reference: "SNACK-RESTOCK-02",
+        note: "Restock menjelang akhir pekan",
+        occurredAt: "2025-10-13T03:00:00.000Z",
+      },
+      {
+        type: "SALE",
+        quantity: -8,
+        reference: "POS-2025-2020",
+        note: "Penjualan rutin kasir admin",
+        occurredAt: "2025-10-13T05:05:00.000Z",
+      },
+    ],
+  },
+  {
+    sku: "SKU-SOAP-HERBAL-500",
+    outletCode: "MAIN",
+    quantity: 16,
+    costPrice: 26500,
+    movements: [
+      {
+        type: "INITIAL",
+        quantity: 18,
+        reference: "SOAP-LOAD-01",
+        note: "Rak kebersihan diisi ulang",
+        occurredAt: "2025-10-12T02:40:00.000Z",
+      },
+      {
+        type: "PURCHASE",
+        quantity: 4,
+        reference: "SOAP-RESTOCK-02",
+        note: "Tambahan untuk promo void test",
+        occurredAt: "2025-10-13T01:10:00.000Z",
+      },
+      {
+        type: "SALE",
+        quantity: -6,
+        reference: "POS-2025-3030",
+        note: "Bundling refill sabun",
+        occurredAt: "2025-10-13T04:16:00.000Z",
+      },
+    ],
+  },
+  {
+    sku: "SKU-SOAP-HERBAL-500",
+    outletCode: "BR2",
+    quantity: 28,
+    costPrice: 26500,
+    movements: [
+      {
+        type: "INITIAL",
+        quantity: 30,
+        reference: "SOAP-LOAD-03",
+        note: "Pembukaan rak kebersihan",
+        occurredAt: "2025-10-12T03:10:00.000Z",
+      },
+      {
+        type: "SALE",
+        quantity: -2,
+        reference: "POS-2025-2015",
+        note: "Program loyalti pelanggan",
+        occurredAt: "2025-10-12T07:30:00.000Z",
+      },
+    ],
+  },
 ];
 
 const usersData = [
@@ -464,6 +647,31 @@ const sessionSeeds = [
   },
 ];
 
+const cashSessionSeeds = [
+  {
+    key: "main-closed-yesterday",
+    outletCode: "MAIN",
+    userEmail: "cashier@example.com",
+    openingCash: 150000,
+    closingCash: 215000,
+    expectedCash: 220000,
+    difference: -5000,
+    openTime: "2025-10-12T01:30:00.000Z",
+    closeTime: "2025-10-12T14:05:00.000Z",
+  },
+  {
+    key: "main-open",
+    outletCode: "MAIN",
+    userEmail: "cashier@example.com",
+    openingCash: 200000,
+    closingCash: null,
+    expectedCash: null,
+    difference: null,
+    openTime: "2025-10-13T01:55:00.000Z",
+    closeTime: null,
+  },
+];
+
 const verificationTokenSeeds = [
   {
     identifier: "admin@example.com",
@@ -482,6 +690,7 @@ const saleSeeds = [
     receiptNumber: "POS-2025-1001",
     outletCode: "MAIN",
     cashierEmail: "cashier@example.com",
+    sessionKey: "main-closed-yesterday",
     soldAt: "2025-10-12T03:15:00.000Z",
     notes: "Shift pagi - promo roti wholegrain",
     items: [
@@ -513,6 +722,7 @@ const saleSeeds = [
     receiptNumber: "POS-2025-1010",
     outletCode: "MAIN",
     cashierEmail: "cashier@example.com",
+    sessionKey: "main-open",
     soldAt: "2025-10-13T02:40:00.000Z",
     notes: "Shift pagi - isi ulang rumah tangga",
     items: [
@@ -535,41 +745,126 @@ const saleSeeds = [
     items: [
       { sku: "SKU-COFFEE-ARABICA-250", quantity: 1, discount: 3000 },
       { sku: "SKU-FLOOR-LEMON-1L", quantity: 2, discount: 3900 },
+      { sku: "SKU-SNACK-NORI-12", quantity: 4, discount: 0 },
     ],
     payments: [
       { method: "EWALLET", amount: 50000, reference: "EWALLET-2020" },
       { method: "QRIS", amount: null, reference: "QR-2020" },
     ],
   },
+  {
+    receiptNumber: "POS-2025-3030",
+    outletCode: "MAIN",
+    cashierEmail: "cashier@example.com",
+    sessionKey: "main-open",
+    soldAt: "2025-10-13T04:15:00.000Z",
+    notes: "Shift pagi - paket camilan & kebersihan",
+    items: [
+      { sku: "SKU-SNACK-NORI-12", quantity: 4, discount: 0 },
+      { sku: "SKU-SOAP-HERBAL-500", quantity: 2, discount: 2000 },
+      { sku: "SKU-COFFEE-ARABICA-250", quantity: 1, discount: 0 },
+    ],
+    payments: [
+      { method: "CASH", amount: 120000, reference: "CASH-3030" },
+      { method: "QRIS", amount: null, reference: "QR-3030" },
+    ],
+  },
+  {
+    receiptNumber: "POS-2025-4040",
+    outletCode: "MAIN",
+    cashierEmail: "cashier@example.com",
+    sessionKey: "main-open",
+    soldAt: "2025-10-13T05:00:00.000Z",
+    notes: "Shift pagi - transaksi latihan void",
+    items: [
+      { sku: "SKU-BREAD-WHOLEGRAIN", quantity: 1, discount: 0 },
+      { sku: "SKU-FLOOR-LEMON-1L", quantity: 2, discount: 2000 },
+      { sku: "SKU-SOAP-HERBAL-500", quantity: 1, discount: 0 },
+    ],
+    payments: [
+      { method: "CARD", amount: 100000, reference: "CARD-4040" },
+      { method: "QRIS", amount: null, reference: "QR-4040" },
+    ],
+  },
 ];
 
 const refundSeeds = [
   {
-    receiptNumber: "POS-2025-2015",
-    amount: 45000,
-    reason: "Retur 1 pack apel karena memar",
-    approvedByEmail: "owner@example.com",
-    processedAt: "2025-10-12T09:30:00.000Z",
+    receiptNumber: "POS-2025-1010",
+    amount: 39000,
+    reason: "Kemasan pembersih lantai bocor",
+    approvedByEmail: "admin@example.com",
+    processedAt: "2025-10-13T05:45:00.000Z",
     method: "CASH",
+    items: [
+      { sku: "SKU-FLOOR-LEMON-1L", quantity: 1 },
+    ],
   },
 ];
+
+const voidSeeds = [
+  {
+    receiptNumber: "POS-2025-4040",
+    reason: "Pembayaran ganda terdeteksi",
+    performedByEmail: "owner@example.com",
+    processedAt: "2025-10-13T05:25:00.000Z",
+  },
+];
+
+const lowStockTargets = [
+  {
+    sku: "SKU-TEA-PREMIUM-50",
+    outletCode: "MAIN",
+    note: "Seed: buffer teh kritis",
+    triggeredAt: "2025-10-13T06:15:00.000Z",
+  },
+  {
+    sku: "SKU-MILK-FRESH-1L",
+    outletCode: "BR2",
+    note: "Seed: stok susu BR2 rendah",
+    triggeredAt: "2025-10-13T06:20:00.000Z",
+  },
+  {
+    sku: "SKU-SNACK-NORI-12",
+    outletCode: "MAIN",
+    note: "Seed: camilan favorit hampir habis",
+    triggeredAt: "2025-10-13T06:30:00.000Z",
+  },
+];
+
+async function resetAdditiveTables() {
+  console.log("♻️  --reset flag detected. Truncating additive tables...");
+  await prisma.$transaction([
+    prisma.activityLog.deleteMany(),
+    prisma.lowStockAlert.deleteMany(),
+    prisma.refundItem.deleteMany(),
+    prisma.refund.deleteMany(),
+  ]);
+  await prisma.sale.updateMany({ data: { sessionId: null } });
+  await prisma.cashSession.deleteMany();
+}
 
 async function clearAllTables() {
   console.log("🧹 Clearing existing records…");
   await prisma.$transaction([
     prisma.payment.deleteMany(),
     prisma.saleItem.deleteMany(),
+    prisma.refundItem.deleteMany(),
     prisma.refund.deleteMany(),
     prisma.sale.deleteMany(),
+    prisma.cashSession.deleteMany(),
     prisma.stockMovement.deleteMany(),
+    prisma.lowStockAlert.deleteMany(),
     prisma.inventory.deleteMany(),
     prisma.dailyCashSummary.deleteMany(),
     prisma.product.deleteMany(),
     prisma.category.deleteMany(),
     prisma.supplier.deleteMany(),
+    prisma.activityLog.deleteMany(),
     prisma.session.deleteMany(),
     prisma.account.deleteMany(),
     prisma.verificationToken.deleteMany(),
+    prisma.userOutlet.deleteMany(),
     prisma.user.deleteMany(),
     prisma.taxSetting.deleteMany(),
     prisma.outlet.deleteMany(),
@@ -651,6 +946,7 @@ async function seedProducts(categoryMap, supplierMap) {
         promoEnd: product.promoEnd ? toDate(product.promoEnd) : null,
         isTaxable: product.isTaxable ?? false,
         taxRate: product.taxRate !== undefined ? toDecimal(product.taxRate) : null,
+        minStock: product.minStock ?? 0,
         categoryId: categoryMap.get(product.categorySlug)?.id ?? null,
         supplierId: supplierMap.get(product.supplierName)?.id ?? null,
       },
@@ -780,7 +1076,66 @@ async function seedVerificationTokens() {
   console.log(`✉️  Seeded ${verificationTokenSeeds.length} verification tokens`);
 }
 
-async function seedSales(productsMap, outletsMap, userMap) {
+async function seedCashSessions(userMap, outletMap) {
+  const map = new Map();
+  for (const session of cashSessionSeeds) {
+    const user = userMap.get(session.userEmail);
+    const outlet = outletMap.get(session.outletCode);
+    if (!user || !outlet) continue;
+    const record = await prisma.cashSession.create({
+      data: {
+        outletId: outlet.id,
+        userId: user.id,
+        openingCash: toDecimal(session.openingCash),
+        closingCash:
+          session.closingCash !== null && session.closingCash !== undefined
+            ? toDecimal(session.closingCash)
+            : null,
+        expectedCash:
+          session.expectedCash !== null && session.expectedCash !== undefined
+            ? toDecimal(session.expectedCash)
+            : null,
+        difference:
+          session.difference !== null && session.difference !== undefined
+            ? toDecimal(session.difference)
+            : null,
+        openTime: toDate(session.openTime),
+        closeTime: session.closeTime ? toDate(session.closeTime) : null,
+      },
+    });
+    map.set(session.key, record);
+    queueAuditLog({
+      action: "SHIFT_OPEN",
+      userId: user.id,
+      outletId: outlet.id,
+      entity: "CASH_SESSION",
+      entityId: record.id,
+      details: {
+        openingCash: session.openingCash,
+      },
+      createdAt: session.openTime,
+    });
+    if (session.closeTime) {
+      queueAuditLog({
+        action: "SHIFT_CLOSE",
+        userId: user.id,
+        outletId: outlet.id,
+        entity: "CASH_SESSION",
+        entityId: record.id,
+        details: {
+          closingCash: session.closingCash,
+          expectedCash: session.expectedCash,
+          difference: session.difference,
+        },
+        createdAt: session.closeTime,
+      });
+    }
+  }
+  console.log(`💵 Seeded ${map.size} cash sessions`);
+  return map;
+}
+
+async function seedSales(productsMap, outletsMap, userMap, sessionMap) {
   const saleMap = new Map();
   const metrics = [];
 
@@ -857,6 +1212,7 @@ async function seedSales(productsMap, outletsMap, userMap) {
       );
     }
 
+    const session = sale.sessionKey ? sessionMap.get(sale.sessionKey) : null;
     const saleRecord = await prisma.sale.create({
       data: {
         receiptNumber: sale.receiptNumber,
@@ -869,14 +1225,14 @@ async function seedSales(productsMap, outletsMap, userMap) {
         totalNet: toDecimal(totalNet),
         soldAt: toDate(sale.soldAt),
         status: "COMPLETED",
+        sessionId: session?.id ?? null,
+        items: {
+          create: saleItemsPayload,
+        },
       },
-    });
-
-    await prisma.saleItem.createMany({
-      data: saleItemsPayload.map((item) => ({
-        ...item,
-        saleId: saleRecord.id,
-      })),
+      include: {
+        items: true,
+      },
     });
 
     await prisma.payment.createMany({
@@ -904,41 +1260,365 @@ async function seedSales(productsMap, outletsMap, userMap) {
       cashAmount,
       notes: sale.notes,
     });
+
+    queueAuditLog({
+      action: "SALE_RECORD",
+      userId: cashier?.id ?? null,
+      outletId: outlet.id,
+      entity: "SALE",
+      entityId: saleRecord.id,
+      details: {
+        receiptNumber: sale.receiptNumber,
+        totalNet,
+        sessionId: session?.id ?? null,
+      },
+      createdAt: sale.soldAt,
+    });
   }
 
   console.log(`🧾 Seeded ${saleMap.size} sales with payments & items`);
   return { saleMap, metrics };
 }
 
-async function seedRefunds(saleMap, userMap) {
+async function seedRefunds(saleMap, userMap, productsMap) {
   const refundMetrics = [];
   for (const refund of refundSeeds) {
-    const sale = saleMap.get(refund.receiptNumber)?.record;
+    const saleEntry = saleMap.get(refund.receiptNumber);
+    const sale = saleEntry?.record;
     if (!sale) {
       console.warn(`⚠️  Skip refund for ${refund.receiptNumber}: sale missing`);
       continue;
     }
     const approver = refund.approvedByEmail ? userMap.get(refund.approvedByEmail) : null;
+    const refundItemsSpec = refund.items ?? [];
+    if (!refundItemsSpec.length) {
+      console.warn(`⚠️  Skip refund for ${refund.receiptNumber}: no items provided`);
+      continue;
+    }
+
+    const refundItemPayload = [];
+    const restockTasks = [];
+    let computedAmount = 0;
+    let restockedQuantity = 0;
+
+    for (const itemSpec of refundItemsSpec) {
+      const product = productsMap.get(itemSpec.sku);
+      if (!product) {
+        console.warn(`⚠️  Refund skip item ${itemSpec.sku}: product missing`);
+        continue;
+      }
+      const saleItem = sale.items.find((item) => item.productId === product.id);
+      if (!saleItem) {
+        console.warn(`⚠️  Refund skip item ${itemSpec.sku}: sale item missing`);
+        continue;
+      }
+      const quantityToRefund = Math.min(itemSpec.quantity, saleItem.quantity);
+      if (quantityToRefund <= 0) continue;
+
+      const unitPrice = Number(saleItem.unitPrice);
+      const discountPerUnit =
+        saleItem.quantity > 0 ? Number(saleItem.discount ?? 0) / saleItem.quantity : 0;
+      const taxPerUnit =
+        saleItem.quantity > 0 ? Number(saleItem.taxAmount ?? 0) / saleItem.quantity : 0;
+      const lineAmount =
+        (unitPrice - discountPerUnit + taxPerUnit) * quantityToRefund;
+      computedAmount += lineAmount;
+      restockedQuantity += quantityToRefund;
+
+      refundItemPayload.push({
+        saleItemId: saleItem.id,
+        quantity: quantityToRefund,
+      });
+
+      restockTasks.push(async (refundId) => {
+        const inventory = await prisma.inventory.upsert({
+          where: {
+            productId_outletId: {
+              productId: saleItem.productId,
+              outletId: sale.outletId,
+            },
+          },
+          update: {
+            quantity: {
+              increment: quantityToRefund,
+            },
+          },
+          create: {
+            productId: saleItem.productId,
+            outletId: sale.outletId,
+            quantity: quantityToRefund,
+            costPrice: saleItem.unitPrice,
+          },
+        });
+
+        await prisma.stockMovement.create({
+          data: {
+            inventoryId: inventory.id,
+            type: "ADJUSTMENT",
+            quantity: quantityToRefund,
+            reference: sale.id,
+            note: `Refund struk ${sale.receiptNumber}`,
+            createdById: approver?.id ?? null,
+            productId: saleItem.productId,
+            outletId: sale.outletId,
+            relatedSaleId: sale.id,
+            relatedRefundId: refundId,
+          },
+        });
+      });
+    }
+
+    if (!refundItemPayload.length) {
+      console.warn(`⚠️  Refund ${refund.receiptNumber} has no valid items, skip`);
+      continue;
+    }
+
+    const refundAmount = refund.amount ?? Number(computedAmount.toFixed(2));
     const record = await prisma.refund.create({
       data: {
         saleId: sale.id,
-        amount: toDecimal(refund.amount),
+        amount: toDecimal(refundAmount),
         reason: refund.reason ?? null,
         approvedById: approver?.id ?? null,
         processedAt: toDate(refund.processedAt),
+        createdById: approver?.id ?? null,
+        items: {
+          create: refundItemPayload,
+        },
       },
     });
+
+    for (const task of restockTasks) {
+      await task(record.id);
+    }
+
+    await prisma.sale.update({
+      where: { id: sale.id },
+      data: { status: SaleStatus.REFUNDED, updatedAt: new Date() },
+    });
+
+    queueAuditLog({
+      action: "SALE_REFUND",
+      userId: approver?.id ?? null,
+      outletId: sale.outletId,
+      entity: "REFUND",
+      entityId: record.id,
+      details: {
+        receiptNumber: sale.receiptNumber,
+        amount: refundAmount,
+        reason: refund.reason,
+        restockedQuantity,
+      },
+      createdAt: refund.processedAt,
+    });
+
     refundMetrics.push({
       saleId: sale.id,
       outletId: sale.outletId,
       processedAt: record.processedAt,
-      amount: refund.amount,
+      amount: refundAmount,
       method: refund.method ?? null,
       reason: refund.reason ?? "",
     });
   }
   console.log(`↩️  Seeded ${refundMetrics.length} refunds`);
   return refundMetrics;
+}
+
+async function seedVoids(voidSeedsData, saleMap, userMap) {
+  const voidMetrics = [];
+  for (const entry of voidSeedsData) {
+    const saleEntry = saleMap.get(entry.receiptNumber);
+    const sale = saleEntry?.record;
+    if (!sale) {
+      console.warn(`⚠️  Skip void for ${entry.receiptNumber}: sale missing`);
+      continue;
+    }
+    if (sale.status !== SaleStatus.COMPLETED) {
+      console.warn(`⚠️  Sale ${entry.receiptNumber} already processed, skip void`);
+      continue;
+    }
+    const actor = entry.performedByEmail ? userMap.get(entry.performedByEmail) : null;
+    let restockedQuantity = 0;
+    for (const item of sale.items) {
+      restockedQuantity += item.quantity;
+      const inventory = await prisma.inventory.upsert({
+        where: {
+          productId_outletId: {
+            productId: item.productId,
+            outletId: sale.outletId,
+          },
+        },
+        update: {
+          quantity: {
+            increment: item.quantity,
+          },
+        },
+        create: {
+          productId: item.productId,
+          outletId: sale.outletId,
+          quantity: item.quantity,
+          costPrice: item.unitPrice,
+        },
+      });
+
+      await prisma.stockMovement.create({
+        data: {
+          inventoryId: inventory.id,
+          type: "ADJUSTMENT",
+          quantity: item.quantity,
+          reference: sale.id,
+          note: `Void struk ${sale.receiptNumber}`,
+          createdById: actor?.id ?? null,
+          productId: item.productId,
+          outletId: sale.outletId,
+          relatedSaleId: sale.id,
+        },
+      });
+    }
+
+    await prisma.sale.update({
+      where: { id: sale.id },
+      data: { status: SaleStatus.VOIDED, updatedAt: new Date() },
+    });
+
+    queueAuditLog({
+      action: "SALE_VOID",
+      userId: actor?.id ?? null,
+      outletId: sale.outletId,
+      entity: "SALE",
+      entityId: sale.id,
+      details: {
+        receiptNumber: sale.receiptNumber,
+        reason: entry.reason,
+        restockedQuantity,
+      },
+      createdAt: entry.processedAt,
+    });
+
+    voidMetrics.push({
+      saleId: sale.id,
+      outletId: sale.outletId,
+      processedAt: toDate(entry.processedAt),
+      amount: Number(sale.totalNet),
+      method: "VOID",
+      reason: entry.reason ?? "",
+    });
+  }
+  console.log(`🚫 Seeded ${voidMetrics.length} void transactions`);
+  return voidMetrics;
+}
+
+async function evaluateLowStockForSeed({ productId, outletId, note, triggeredAt }) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { minStock: true },
+  });
+
+  if (!product || product.minStock <= 0) {
+    return { status: "unchanged" };
+  }
+
+  const inventory = await prisma.inventory.findUnique({
+    where: {
+      productId_outletId: {
+        productId,
+        outletId,
+      },
+    },
+    select: { quantity: true },
+  });
+
+  const quantity = inventory?.quantity ?? 0;
+  const now = triggeredAt ? toDate(triggeredAt) : new Date();
+  const dayStart = startOfUtcDay(now);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const existingAlert = await prisma.lowStockAlert.findFirst({
+    where: {
+      productId,
+      outletId,
+      triggeredAt: {
+        gte: dayStart,
+        lt: dayEnd,
+      },
+    },
+    orderBy: {
+      triggeredAt: "desc",
+    },
+  });
+
+  if (quantity <= product.minStock) {
+    if (existingAlert) {
+      if (existingAlert.clearedAt) {
+        const reopened = await prisma.lowStockAlert.update({
+          where: { id: existingAlert.id },
+          data: {
+            clearedAt: null,
+            note: note ?? existingAlert.note,
+            triggeredAt: now,
+          },
+        });
+        return { status: "triggered", alert: reopened };
+      }
+      return { status: "unchanged", alert: existingAlert };
+    }
+
+    const created = await prisma.lowStockAlert.create({
+      data: {
+        productId,
+        outletId,
+        note: note ?? null,
+        triggeredAt: now,
+      },
+    });
+    return { status: "triggered", alert: created };
+  }
+
+  if (existingAlert && !existingAlert.clearedAt) {
+    const cleared = await prisma.lowStockAlert.update({
+      where: { id: existingAlert.id },
+      data: {
+        clearedAt: now,
+      },
+    });
+    return { status: "cleared", alert: cleared };
+  }
+
+  return { status: "unchanged" };
+}
+
+async function seedLowStockAlerts(productsMap, outletsMap) {
+  let count = 0;
+  for (const target of lowStockTargets) {
+    const product = productsMap.get(target.sku);
+    const outlet = outletsMap.get(target.outletCode);
+    if (!product || !outlet) continue;
+
+    const result = await evaluateLowStockForSeed({
+      productId: product.id,
+      outletId: outlet.id,
+      note: target.note,
+      triggeredAt: target.triggeredAt,
+    });
+
+    if (result.status === "triggered" && result.alert) {
+      count += 1;
+      queueAuditLog({
+        action: "LOW_STOCK_TRIGGER",
+        userId: null,
+        outletId: outlet.id,
+        entity: "LOW_STOCK_ALERT",
+        entityId: result.alert.id,
+        details: {
+          productId: product.id,
+          outletCode: target.outletCode,
+        },
+        createdAt: target.triggeredAt,
+      });
+    }
+  }
+  console.log(`⚠️  Seeded ${count} low stock alerts`);
 }
 
 function buildDailySummaries(saleMetrics, refundMetrics) {
@@ -1009,6 +1689,9 @@ async function seedDailyCashSummary(summaryMap) {
 
 async function main() {
   const start = Date.now();
+  if (shouldResetAdditive) {
+    await resetAdditiveTables();
+  }
   await clearAllTables();
 
   const outletsMap = await seedOutlets();
@@ -1022,11 +1705,20 @@ async function main() {
   await seedAccounts(userMap);
   await seedSessions(userMap);
   await seedVerificationTokens();
+  const sessionMap = await seedCashSessions(userMap, outletsMap);
 
-  const { saleMap, metrics: saleMetrics } = await seedSales(productsMap, outletsMap, userMap);
-  const refundMetrics = await seedRefunds(saleMap, userMap);
-  const summaryMap = buildDailySummaries(saleMetrics, refundMetrics);
+  const { saleMap, metrics: saleMetrics } = await seedSales(
+    productsMap,
+    outletsMap,
+    userMap,
+    sessionMap,
+  );
+  const voidMetrics = await seedVoids(voidSeeds, saleMap, userMap);
+  const refundMetrics = await seedRefunds(saleMap, userMap, productsMap);
+  const summaryMap = buildDailySummaries(saleMetrics, [...refundMetrics, ...voidMetrics]);
   await seedDailyCashSummary(summaryMap);
+  await seedLowStockAlerts(productsMap, outletsMap);
+  await flushAuditLogs();
 
   await prisma.$disconnect();
   const elapsed = ((Date.now() - start) / 1000).toFixed(2);

@@ -9,6 +9,13 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
 ### Added
 
+- Inventory router (`inventoryRouter`) dengan mutation `setProductMinStock`, query `listLowStock`, dan `acknowledgeLowStock` lengkap dengan `LowStockAlert` persistence.
+- UI produk: field **Stok Minimum**, kolom **Min Stock** & **Status Stok**, badge “Low”, action cepat **Set Min Stock**, serta toggle filter **Tampilkan hanya yang Low Stock**.
+- Widget Dashboard low-stock yang mengambil data alert per outlet aktif + tombol Acknowledge.
+- Shift kasir end-to-end (modal buka/tutup, difference, middleware `requireActiveShift`, dan audit log `SHIFT_*`).
+- Script seed penuh (`pnpm run seed:full`) kini menanam user owner/admin/kasir, sesi kas aktif, transaksi contoh, refund, void, dan alert stok. Tambahkan flag `--reset` untuk truncate tabel additive sebelum seeding ulang.
+- Unit tests untuk `writeAuditLog`, `evaluateLowStock`, `requireActiveShift`, serta service refund/void.
+- Playwright E2E baru: `cashier.shift`, `cashier.refund_void`, `dashboard.lowstock`, dan `products.minstock`.
 - Halaman demo publik read-only (`/demo/*`) beserta CTA "Coba Demo Tanpa Login" di beranda.
 - Worker MSW otomatis untuk `/demo/*` termasuk di produksi via toggle `startMockMode`.
 - Endpoint tRPC `sales.voidSale` dan `sales.refundSale` lengkap dengan dialog konfirmasi kasir dan ringkasan restock.
@@ -105,6 +112,8 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
 ### Changed
 
+- Dokumentasi README/PROJECT_SUMMARY memperinci alur shift → sale → alert, filter low-stock, serta test matrix phase 1.
+- Seed storyline diperbarui agar refund/void merepresentasikan aktivitas kasir nyata dan mengisi `ActivityLog`.
 - NextAuth kini menggunakan strategi sesi JWT sehingga middleware edge dapat membaca token yang sama tanpa ketergantungan tabel `Session`.
 - Navbar kini minimal saat belum login dan menampilkan avatar + outlet aktif ketika sesi ada.
 - Tata letak modul kasir dirapikan menjadi grid dua kolom dengan ringkasan hierarkis dan validasi diskon sesuai kebijakan toko.

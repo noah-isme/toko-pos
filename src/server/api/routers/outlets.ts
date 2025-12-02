@@ -112,6 +112,8 @@ export const outletsRouter = router({
             quantity: input.quantity,
             note: input.note,
             createdById: userId,
+            productId: input.productId,
+            outletId: input.outletId,
           },
         });
 
@@ -190,6 +192,8 @@ export const outletsRouter = router({
               quantity: -input.quantity,
               note: input.note,
               createdById: userId,
+              productId: input.productId,
+              outletId: input.fromOutletId,
             },
             {
               inventoryId: target.id,
@@ -197,6 +201,8 @@ export const outletsRouter = router({
               quantity: input.quantity,
               note: input.note,
               createdById: userId,
+              productId: input.productId,
+              outletId: input.toOutletId,
             },
           ],
         });
@@ -264,6 +270,8 @@ export const outletsRouter = router({
                 quantity: delta,
                 note: entry.note,
                 createdById: userId,
+                productId: inventory.productId,
+                outletId: input.outletId,
               },
             });
           }

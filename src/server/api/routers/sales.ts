@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { addDays, endOfDay, startOfDay } from "date-fns";
+import { z } from "zod";
 
-import { PaymentMethod, Prisma } from "@/server/db/enums";
+import { PaymentMethod, Prisma, SaleStatus } from "@/server/db/enums";
 import { env } from "@/env";
 import { generateReceiptPdf } from "@/lib/pdf";
 import {
@@ -32,9 +33,28 @@ import {
   normalizePaperSize,
 } from "@/server/api/services/sales-validation";
 import { db } from "@/server/db";
-import { protectedProcedure, router } from "@/server/api/trpc";
+import { protectedProcedure, router, requireActiveShift } from "@/server/api/trpc";
+import { writeAuditLog } from "@/server/services/audit";
+import { evaluateLowStock } from "@/server/services/lowStock";
 
 const toDecimal = (value: number) => new Prisma.Decimal(value.toFixed(2));
+
+type RecordSaleInput = z.infer<typeof recordSaleInputSchema>;
+type VoidSaleInput = z.infer<typeof voidSaleInputSchema>;
+type RefundSaleInput = z.infer<typeof refundSaleInputSchema>;
+
+const resolveSaleOutlet = async (saleId: string) => {
+  const sale = await db.sale.findUnique({
+    where: { id: saleId },
+    select: { outletId: true },
+  });
+
+  if (!sale) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
+  }
+
+  return sale.outletId;
+};
 
 export const salesRouter = router({
   getDailySummary: protectedProcedure
@@ -193,6 +213,7 @@ export const salesRouter = router({
             select: { name: true },
           },
           payments: true,
+          session: true,
         },
         take: input.limit,
       });
@@ -206,14 +227,30 @@ export const salesRouter = router({
           totalNet: Number(sale.totalNet),
           paymentMethods: sale.payments.map((payment) => payment.method),
           status: sale.status,
+          shiftOpenedAt: sale.session?.openTime
+            ? sale.session.openTime.toISOString()
+            : null,
         })),
       );
     }),
   recordSale: protectedProcedure
     .input(recordSaleInputSchema)
+    .use(
+      requireActiveShift(({ input }: { input: RecordSaleInput }) => ({
+        outletId: input.outletId,
+      })),
+    )
     .output(recordSaleOutputSchema)
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = recordSaleInputSchema.parse(rawInput);
       try {
+        if (!ctx.activeShift) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Shift kasir belum aktif.",
+          });
+        }
+
         const financials = calculateFinancials({
           items: input.items,
           discountTotal: input.discountTotal,
@@ -230,12 +267,15 @@ export const salesRouter = router({
 
         ensurePaymentsCoverTotal(input.payments, financials.totalNet);
 
+        const affectedKeys = new Set<string>();
+
         const sale = await db.$transaction(async (tx) => {
           const createdSale = await tx.sale.create({
             data: {
               receiptNumber: input.receiptNumber,
               outletId: input.outletId,
               cashierId: ctx.session?.user.id,
+              sessionId: ctx.activeShift.id,
               soldAt: input.soldAt ? new Date(input.soldAt) : new Date(),
             totalGross: toDecimal(financials.totalGross),
             discountTotal: toDecimal(financials.totalDiscount),
@@ -278,42 +318,94 @@ export const salesRouter = router({
           },
         });
 
-        await Promise.all(
-          input.items.map(async (item) => {
-            const inventory = await tx.inventory.upsert({
-              where: {
-                productId_outletId: {
+          await Promise.all(
+            input.items.map(async (item) => {
+              const inventory = await tx.inventory.upsert({
+                where: {
+                  productId_outletId: {
+                    productId: item.productId,
+                    outletId: input.outletId,
+                  },
+                },
+                create: {
                   productId: item.productId,
                   outletId: input.outletId,
+                  quantity: -item.quantity,
+                  costPrice: toDecimal(item.unitPrice),
                 },
-              },
-              create: {
-                productId: item.productId,
-                outletId: input.outletId,
-                quantity: -item.quantity,
-                costPrice: toDecimal(item.unitPrice),
-              },
-              update: {
-                quantity: {
-                  decrement: item.quantity,
+                update: {
+                  quantity: {
+                    decrement: item.quantity,
+                  },
                 },
-              },
-            });
+              });
 
-            await tx.stockMovement.create({
-              data: {
-                inventoryId: inventory.id,
-                type: "SALE",
-                quantity: -item.quantity,
-                reference: createdSale.id,
-                note: `Penjualan ${createdSale.receiptNumber}`,
-                createdById: ctx.session?.user.id,
-              },
-            });
-          }),
-        );
+              await tx.stockMovement.create({
+                data: {
+                  inventoryId: inventory.id,
+                  type: "SALE",
+                  quantity: -item.quantity,
+                  reference: createdSale.id,
+                  note: `Penjualan ${createdSale.receiptNumber}`,
+                  createdById: ctx.session?.user.id,
+                  productId: item.productId,
+                  outletId: input.outletId,
+                  relatedSaleId: createdSale.id,
+                },
+              });
 
-        return createdSale;
+              affectedKeys.add(`${item.productId}:${input.outletId}`);
+            }),
+          );
+
+          const lowStockResults = await Promise.all(
+            Array.from(affectedKeys).map((key) => {
+              const [productId, outletId] = key.split(":");
+              return evaluateLowStock(
+                {
+                  productId,
+                  outletId,
+                },
+                tx,
+              );
+            }),
+          );
+
+          for (const result of lowStockResults) {
+            if (result && result.status === "triggered") {
+              const alert = result.alert;
+              await writeAuditLog(
+                {
+                  action: "LOW_STOCK_TRIGGER",
+                  userId: ctx.session?.user.id,
+                  outletId: alert.outletId,
+                  entity: "LOW_STOCK_ALERT",
+                  entityId: alert.id,
+                  details: {
+                    productId: alert.productId,
+                  },
+                },
+                tx,
+              );
+            }
+          }
+
+          await writeAuditLog(
+            {
+              action: "SALE_RECORD",
+              userId: ctx.session?.user.id,
+              outletId: input.outletId,
+              entity: "SALE",
+              entityId: createdSale.id,
+              details: {
+                receiptNumber: createdSale.receiptNumber,
+                totalNet: Number(createdSale.totalNet),
+              },
+            },
+            tx,
+          );
+
+          return createdSale;
         });
 
         return recordSaleOutputSchema.parse({
@@ -373,8 +465,14 @@ export const salesRouter = router({
     }),
   voidSale: protectedProcedure
     .input(voidSaleInputSchema)
+    .use(
+      requireActiveShift(async ({ input }: { input: VoidSaleInput }) => ({
+        outletId: await resolveSaleOutlet(input.saleId),
+      })),
+    )
     .output(saleActionOutputSchema)
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = voidSaleInputSchema.parse(rawInput);
       return await db.$transaction(async (tx) => {
         const sale = await tx.sale.findUnique({
           where: {
@@ -389,11 +487,12 @@ export const salesRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
         }
 
-        if (sale.status !== "COMPLETED") {
+        if (sale.status !== SaleStatus.COMPLETED) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Transaksi sudah diproses sebelumnya" });
         }
 
         let restockedQuantity = 0;
+        const affectedKeys = new Set<string>();
 
         for (const item of sale.items) {
           restockedQuantity += item.quantity;
@@ -425,8 +524,13 @@ export const salesRouter = router({
               reference: sale.id,
               note: `Void struk ${sale.receiptNumber}`,
               createdById: ctx.session?.user.id,
+              productId: item.productId,
+              outletId: sale.outletId,
+              relatedSaleId: sale.id,
             },
           });
+
+          affectedKeys.add(`${item.productId}:${sale.outletId}`);
         }
 
         const totalItems = sale.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -434,10 +538,52 @@ export const salesRouter = router({
         await tx.sale.update({
           where: { id: sale.id },
           data: {
-            status: "VOIDED",
+            status: SaleStatus.VOIDED,
             updatedAt: new Date(),
           },
         });
+
+        const lowStockResults = await Promise.all(
+          Array.from(affectedKeys).map((key) => {
+            const [productId, outletId] = key.split(":");
+            return evaluateLowStock({ productId, outletId }, tx);
+          }),
+        );
+
+        for (const result of lowStockResults) {
+          if (result && result.status === "triggered") {
+            const alert = result.alert;
+            await writeAuditLog(
+              {
+                action: "LOW_STOCK_TRIGGER",
+                userId: ctx.session?.user.id,
+                outletId: alert.outletId,
+                entity: "LOW_STOCK_ALERT",
+                entityId: alert.id,
+                details: {
+                  productId: alert.productId,
+                },
+              },
+              tx,
+            );
+          }
+        }
+
+        await writeAuditLog(
+          {
+            action: "SALE_VOID",
+            userId: ctx.session?.user.id,
+            outletId: sale.outletId,
+            entity: "SALE",
+            entityId: sale.id,
+            details: {
+              receiptNumber: sale.receiptNumber,
+              reason: input.reason,
+              restockedQuantity,
+            },
+          },
+          tx,
+        );
 
         return saleActionOutputSchema.parse({
           id: sale.id,
@@ -445,14 +591,20 @@ export const salesRouter = router({
           totalNet: Number(sale.totalNet),
           totalItems,
           restockedQuantity,
-          status: "VOIDED",
+          status: SaleStatus.VOIDED,
         });
       });
     }),
   refundSale: protectedProcedure
     .input(refundSaleInputSchema)
+    .use(
+      requireActiveShift(async ({ input }: { input: RefundSaleInput }) => ({
+        outletId: await resolveSaleOutlet(input.saleId),
+      })),
+    )
     .output(refundSaleOutputSchema)
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = refundSaleInputSchema.parse(rawInput);
       return await db.$transaction(async (tx) => {
         const sale = await tx.sale.findUnique({
           where: {
@@ -468,7 +620,7 @@ export const salesRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
         }
 
-        if (sale.status !== "COMPLETED") {
+        if (sale.status !== SaleStatus.COMPLETED) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Transaksi tidak dapat direfund" });
         }
 
@@ -478,6 +630,7 @@ export const salesRouter = router({
 
         const refundAmount = input.amount ?? Number(sale.totalNet);
         let restockedQuantity = 0;
+        const affectedKeys = new Set<string>();
 
         for (const item of sale.items) {
           restockedQuantity += item.quantity;
@@ -509,8 +662,13 @@ export const salesRouter = router({
               reference: sale.id,
               note: `Refund struk ${sale.receiptNumber}`,
               createdById: ctx.session?.user.id,
+              productId: item.productId,
+              outletId: sale.outletId,
+              relatedSaleId: sale.id,
             },
           });
+
+          affectedKeys.add(`${item.productId}:${sale.outletId}`);
         }
 
         const totalItems = sale.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -518,19 +676,68 @@ export const salesRouter = router({
         await tx.sale.update({
           where: { id: sale.id },
           data: {
-            status: "REFUNDED",
+            status: SaleStatus.REFUNDED,
             updatedAt: new Date(),
           },
         });
 
-        await tx.refund.create({
+        const refund = await tx.refund.create({
           data: {
             saleId: sale.id,
             amount: toDecimal(refundAmount),
             reason: input.reason,
             approvedById: ctx.session?.user.id,
+            createdById: ctx.session?.user.id,
+            items: {
+              create: sale.items.map((item) => ({
+                saleItemId: item.id,
+                quantity: item.quantity,
+              })),
+            },
           },
         });
+
+        const lowStockResults = await Promise.all(
+          Array.from(affectedKeys).map((key) => {
+            const [productId, outletId] = key.split(":");
+            return evaluateLowStock({ productId, outletId }, tx);
+          }),
+        );
+
+        for (const result of lowStockResults) {
+          if (result && result.status === "triggered") {
+            const alert = result.alert;
+            await writeAuditLog(
+              {
+                action: "LOW_STOCK_TRIGGER",
+                userId: ctx.session?.user.id,
+                outletId: alert.outletId,
+                entity: "LOW_STOCK_ALERT",
+                entityId: alert.id,
+                details: {
+                  productId: alert.productId,
+                },
+              },
+              tx,
+            );
+          }
+        }
+
+        await writeAuditLog(
+          {
+            action: "SALE_REFUND",
+            userId: ctx.session?.user.id,
+            outletId: sale.outletId,
+            entity: "REFUND",
+            entityId: refund.id,
+            details: {
+              receiptNumber: sale.receiptNumber,
+              amount: refundAmount,
+              reason: input.reason,
+            },
+          },
+          tx,
+        );
 
         return refundSaleOutputSchema.parse({
           id: sale.id,
@@ -538,7 +745,7 @@ export const salesRouter = router({
           totalNet: Number(sale.totalNet),
           totalItems,
           restockedQuantity,
-          status: "REFUNDED",
+          status: SaleStatus.REFUNDED,
           refundAmount,
         });
       });
@@ -596,7 +803,7 @@ export const salesRouter = router({
             lte: now,
           },
           outletId: input.outletId ?? undefined,
-          status: "COMPLETED",
+          status: SaleStatus.COMPLETED,
           payments: input.paymentMethod
             ? {
                 some: {

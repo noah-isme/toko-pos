@@ -1,6 +1,6 @@
-# Kios POS
+# Toko POS
 
-Kios POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App Router) dengan TypeScript, tRPC, Prisma, dan Supabase. Proyek ini menyiapkan fondasi MVP lengkap untuk modul kasir, manajemen produk, otentikasi role, pencetakan struk PDF, dan laporan penjualan harian.
+Toko POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App Router) dengan TypeScript, tRPC, Prisma, dan Supabase. Proyek ini menyiapkan fondasi MVP lengkap untuk modul kasir, manajemen produk, otentikasi role, pencetakan struk PDF, dan laporan penjualan harian.
 
 ## Stack Utama
 
@@ -28,6 +28,32 @@ Kios POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App R
 - Template struk PDF siap cetak menggunakan `pdf-lib`.
 - Script impor CSV untuk mengisi katalog awal langsung ke Supabase/Postgres.
 
+## Operasional Kasir & Inventori (Phase 1 Stabil)
+
+### Shift Kasir
+
+- Header kasir kini menampilkan chip status shift lengkap dengan tombol **Buka/Tutup Shift** serta modal yang meminta kas awal/akhir.
+- Semua mutasi kritikal (record sale, refund, void) melewati middleware `requireActiveShift`, sehingga tidak ada transaksi tanpa shift aktif.
+- Penutupan shift menghitung otomatis `expectedCash`, selisih, dan menyimpan ringkasan ke `CashSession` + `ActivityLog` (`SHIFT_OPEN`, `SHIFT_CLOSE`).
+
+### Refund & Void
+
+- Dialog refund/void mewajibkan alasan singkat dan menampilkan ringkasan nominal/restock.
+- Mutasi otomatis mengembalikan stok, mencatat `StockMovement`, serta menulis audit log (`SALE_REFUND`, `SALE_VOID`) agar kasir mudah dilacak.
+- riwayat struk (`/cashier/receipts`) menampilkan status VOID/REFUND dan menyediakan tombol re-print 58mm.
+
+### Low-Stock Alerts
+
+- Setiap produk memiliki `minStock` dan dievaluasi via service `evaluateLowStock`. Alert tersimpan di tabel `LowStockAlert` dan dipakai di dashboard serta tabel produk.
+- Widget Dashboard menampilkan SKU kritis per outlet aktif dan menyediakan tombol **Acknowledge** (mengisi `clearedAt`).
+- Produk dapat difilter menggunakan toggle **“Tampilkan hanya yang Low Stock”** sehingga tim pembelian fokus pada SKU kritikal.
+
+### Produk: Field Min Stock
+
+- Formulir produk memiliki input **Stok Minimum (minStock)** lengkap dengan helper text dan default 0.
+- Kolom **Min Stock** dan **Status Stok** baru di TanStack Table menampilkan angka, badge `Low/Belum diatur`, serta action cepat **Set Min Stock**.
+- Preferensi visibilitas kolom tetap dipersist di `localStorage` sehingga kasir/admin mempertahankan layout favoritnya.
+
 ## Persiapan Lingkungan
 
 > 💡 **Untuk panduan lengkap setup database dan migrasi**, lihat [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)
@@ -43,8 +69,8 @@ Kios POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App R
    Contoh konfigurasi `.env` untuk pengembangan lokal:
 
    ```env
-   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kios_pos?schema=public"
-   SHADOW_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/kios_pos_shadow?schema=public"
+   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/toko_pos?schema=public"
+   SHADOW_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/toko_pos_shadow?schema=public"
    
    NEXTAUTH_URL="http://localhost:3000"
    NEXTAUTH_SECRET="dev-secret-change-me"
@@ -56,7 +82,7 @@ Kios POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App R
    EMAIL_SERVER_PORT=587
    EMAIL_SERVER_USER="apikey"
    EMAIL_SERVER_PASSWORD="supersecret"
-   EMAIL_FROM="Kios POS <no-reply@example.com>"
+   EMAIL_FROM="Toko POS <no-reply@example.com>"
    
    SUPABASE_URL="https://your-project.supabase.co"
    SUPABASE_ANON_KEY="public-anon-key"
@@ -83,6 +109,8 @@ Kios POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App R
 
    ```bash
    pnpm run seed:products
+   pnpm run seed:full       # storyline lengkap (kasir demo, sesi kas, alert, refund/void)
+   pnpm run seed:full -- --reset   # truncate tabel additive (CashSession, ActivityLog, LowStockAlert, Refund*) sebelum seeding ulang
    ```
 
 5. Jalankan development server (pnpm):
@@ -117,9 +145,12 @@ Kios POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App R
 ## Testing Manual
 
 - Gunakan halaman **Kasir** untuk mensimulasikan penjualan (sertakan variasi metode bayar & refund). Setelah checkout, PDF struk akan terbuka di tab baru lengkap dengan breakdown diskon & PPN.
+- Pastikan selalu membuka shift sebelum transaksi. Modal Buka Shift akan muncul otomatis ketika outlet aktif belum memiliki `CashSession` berjalan.
 - Tombol checkout akan menolak transaksi jika diskon total melebihi batas toko (`DISCOUNT_LIMIT_PERCENT`) atau nominal pembayaran kurang dari total — pesan kesalahan ditampilkan dalam Bahasa Indonesia.
+- Uji alur **Refund/Void** dari kartu “Transaksi Terakhir” atau halaman `/cashier/receipts`: stok dikembalikan, audit log tersimpan, dan badge status muncul di tabel.
 - Halaman **Laporan Harian** menampilkan rekap penjualan berdasarkan data `Sale` dan `Payment`.
-- Halaman **Produk** menyediakan panel lengkap untuk sinkronisasi SKU, kategori, supplier, promo, dan tarif PPN per produk.
+- Halaman **Produk** kini mendukung pengaturan `minStock`, badge status stok, aksi cepat “Set Min Stock”, serta filter khusus SKU kritis.
+- Widget **Alert Stok Rendah** di dashboard akan menampilkan SKU yang stoknya <= `minStock`. Setelah melakukan restock atau review fisik, klik tombol ceklis untuk mengisi `clearedAt`.
 - Halaman **Manajemen Stok** mendukung penyesuaian cepat, transfer antar outlet, serta stock opname.
 - Untuk mencoba mock mode secara lokal cukup kosongkan variabel Supabase lalu jalankan `pnpm run dev`. Data tersimpan di IndexedDB/LocalStorage sehingga refresh halaman tetap mempertahankan perubahan kasir.
 - Struk PDF sekarang menyediakan preset lebar **58 mm** dan **80 mm** dengan metadata toko (nama, NPWP) serta QR Code nomor struk. Unduh kedua ukuran untuk memastikan layout tetap konsisten pada printer termal Anda.

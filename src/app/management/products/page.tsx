@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
@@ -37,6 +37,7 @@ import {
 } from "@tanstack/react-table";
 
 import { api } from "@/trpc/client";
+import { useOutlet } from "@/lib/outlet-context";
 
 const PRODUCT_COLUMNS = [
   { key: "name", label: "Nama", align: "left" },
@@ -47,6 +48,8 @@ const PRODUCT_COLUMNS = [
   { key: "discount", label: "Diskon", align: "right" },
   { key: "promo", label: "Promo", align: "right" },
   { key: "tax", label: "PPN", align: "right" },
+  { key: "minStock", label: "Min Stock", align: "right" },
+  { key: "stockStatus", label: "Status Stok", align: "left" },
   { key: "actions", label: "Aksi", align: "right" },
 ] as const;
 
@@ -115,6 +118,7 @@ type ProductFormState = {
   promoEnd: string;
   isTaxable: boolean;
   taxRate: string;
+  minStock: string;
 };
 
 const emptyProductForm: ProductFormState = {
@@ -133,6 +137,7 @@ const emptyProductForm: ProductFormState = {
   promoEnd: "",
   isTaxable: false,
   taxRate: "",
+  minStock: "0",
 };
 
 const emptyCategoryDraft = {
@@ -158,6 +163,7 @@ export default function ProductManagementPage() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("products");
   const showUndo = useUndoToast();
+  const { currentOutlet } = useOutlet();
   const productsQuery = api.products.list.useQuery({ search });
   const upsertProduct = api.products.upsert.useMutation();
   const categoriesQuery = api.products.categories.useQuery();
@@ -219,6 +225,10 @@ export default function ProductManagementPage() {
   const [movementType, setMovementType] = useState<"IN" | "OUT">("IN");
   const [movementQuantity, setMovementQuantity] = useState("");
   const [movementNote, setMovementNote] = useState("");
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [isMinStockDialogOpen, setIsMinStockDialogOpen] = useState(false);
+  const [minStockProduct, setMinStockProduct] = useState<ProductRow | null>(null);
+  const [minStockDraftValue, setMinStockDraftValue] = useState("0");
 
   const resetForm = () => {
     setFormState(emptyProductForm);
@@ -234,16 +244,6 @@ export default function ProductManagementPage() {
     () => taxSettingsQuery.data?.find((setting) => setting.isActive)?.rate ?? null,
     [taxSettingsQuery.data],
   );
-  const filteredProducts = useMemo(() => {
-    const list = productsQuery.data ?? [];
-    return list.filter((product) => {
-      const matchCategory =
-        selectedCategory === "all" || product.categoryId === selectedCategory;
-      const matchSupplier =
-        selectedSupplier === "all" || product.supplierId === selectedSupplier;
-      return matchCategory && matchSupplier;
-    });
-  }, [productsQuery.data, selectedCategory, selectedSupplier]);
   const productOptions = productsQuery.data ?? [];
 
   useEffect(() => {
@@ -257,6 +257,11 @@ export default function ProductManagementPage() {
       setMovementOutletId(outletsQuery.data[0].id);
     }
   }, [movementOutletId, outletsQuery.data]);
+  useEffect(() => {
+    if (!currentOutlet?.id && lowStockOnly) {
+      setLowStockOnly(false);
+    }
+  }, [currentOutlet?.id, lowStockOnly]);
 
   const inventoryQuery = api.products.getInventoryByProduct.useQuery(
     { productId: movementProductId },
@@ -275,6 +280,75 @@ export default function ProductManagementPage() {
   const inventoryRecords = inventoryQuery.data ?? [];
   const movementRecords = stockMovementsQuery.data ?? [];
   const isPostingAdjustment = createStockAdjustment.isPending;
+  const lowStockQuery = api.inventory.listLowStock.useQuery(
+    { outletId: currentOutlet?.id ?? "", limit: 100 },
+    { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
+  );
+  const setProductMinStock = api.inventory.setProductMinStock.useMutation({
+    async onSuccess() {
+      await Promise.all([ctx.products.list.invalidate(), lowStockQuery.refetch()]);
+    },
+  });
+  const lowStockAlerts = lowStockQuery.data ?? [];
+  const lowStockProductIds = useMemo(() => {
+    return new Set(lowStockAlerts.map((alert) => alert.productId));
+  }, [lowStockAlerts]);
+  const lowStockMap = useMemo(() => {
+    const map = new Map<string, (typeof lowStockAlerts)[number]>();
+    lowStockAlerts.forEach((alert) => {
+      map.set(alert.productId, alert);
+    });
+    return map;
+  }, [lowStockAlerts]);
+  const hasMinStockConfigured = useMemo(
+    () => (productsQuery.data ?? []).some((product) => product.minStock > 0),
+    [productsQuery.data],
+  );
+  const lowStockCount = lowStockAlerts.length;
+  const filteredProducts = useMemo(() => {
+    const list = productsQuery.data ?? [];
+    return list.filter((product) => {
+      const matchCategory =
+        selectedCategory === "all" || product.categoryId === selectedCategory;
+      const matchSupplier =
+        selectedSupplier === "all" || product.supplierId === selectedSupplier;
+      const matchLowStock = !lowStockOnly || lowStockProductIds.has(product.id);
+      return matchCategory && matchSupplier && matchLowStock;
+    });
+  }, [productsQuery.data, selectedCategory, selectedSupplier, lowStockOnly, lowStockProductIds]);
+  const handleMinStockDialogClose = (open: boolean) => {
+    setIsMinStockDialogOpen(open);
+    if (!open) {
+      setMinStockProduct(null);
+      setMinStockDraftValue("0");
+    }
+  };
+  const openMinStockDialog = useCallback((product: ProductRow) => {
+    setMinStockProduct(product);
+    setMinStockDraftValue(String(product.minStock ?? 0));
+    setIsMinStockDialogOpen(true);
+  }, []);
+  const handleSaveMinStock = async () => {
+    if (!minStockProduct) {
+      return;
+    }
+    const parsed = Number(minStockDraftValue);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      toast.error("Min stock harus bilangan bulat dan minimal 0");
+      return;
+    }
+    try {
+      await setProductMinStock.mutateAsync({
+        productId: minStockProduct.id,
+        minStock: parsed,
+      });
+      toast.success("Ambang stok diperbarui");
+      handleMinStockDialogClose(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Gagal menyimpan ambang stok");
+    }
+  };
 
   const columns = useMemo<ColumnDef<ProductRow>[]>(() => {
     const baseColumns: ColumnDef<ProductRow>[] = PRODUCT_COLUMNS.map((column) => {
@@ -401,6 +475,48 @@ export default function ProductManagementPage() {
         } satisfies ColumnDef<ProductRow>;
       }
 
+      if (column.key === "minStock") {
+        return {
+          id: key,
+          accessorFn: (row) => row.minStock,
+          header: label,
+          meta: { align, label, key },
+          size: 120,
+          cell: ({ row }) => (
+            <span className="block text-right tabular-nums font-medium">
+              {row.original.minStock ?? 0}
+            </span>
+          ),
+        } satisfies ColumnDef<ProductRow>;
+      }
+
+      if (column.key === "stockStatus") {
+        return {
+          id: key,
+          header: label,
+          meta: { align, label, key },
+          size: 200,
+          cell: ({ row }) => {
+            const minStock = row.original.minStock ?? 0;
+            const alert = lowStockMap.get(row.original.id);
+            if (minStock <= 0) {
+              return <Badge variant="outline">Belum diatur</Badge>;
+            }
+            if (alert) {
+              return (
+                <div className="flex flex-col items-start gap-1">
+                  <Badge variant="destructive">Low</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Qty {alert.quantity ?? "-"} / Min {minStock}
+                  </span>
+                </div>
+              );
+            }
+            return <Badge variant="secondary">Aman</Badge>;
+          },
+        } satisfies ColumnDef<ProductRow>;
+      }
+
       return {
         id: key,
         accessorKey: key,
@@ -417,51 +533,61 @@ export default function ProductManagementPage() {
       enableResizing: false,
       size: 80,
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setFormState({
-              id: row.original.id,
-              name: row.original.name,
-              sku: row.original.sku,
-              barcode: row.original.barcode ?? "",
-              price: String(row.original.price ?? 0),
-              categoryId: row.original.categoryId ?? "",
-              supplierId: row.original.supplierId ?? "",
-              costPrice:
-                row.original.costPrice != null
-                  ? String(row.original.costPrice)
+        <div className="flex flex-wrap items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFormState({
+                id: row.original.id,
+                name: row.original.name,
+                sku: row.original.sku,
+                barcode: row.original.barcode ?? "",
+                price: String(row.original.price ?? 0),
+                categoryId: row.original.categoryId ?? "",
+                supplierId: row.original.supplierId ?? "",
+                costPrice:
+                  row.original.costPrice != null
+                    ? String(row.original.costPrice)
+                    : "",
+                defaultDiscountPercent:
+                  row.original.defaultDiscountPercent != null
+                    ? String(row.original.defaultDiscountPercent)
+                    : "",
+                promoName: row.original.promoName ?? "",
+                promoPrice:
+                  row.original.promoPrice != null
+                    ? String(row.original.promoPrice)
+                    : "",
+                promoStart: row.original.promoStart
+                  ? row.original.promoStart.slice(0, 10)
                   : "",
-              defaultDiscountPercent:
-                row.original.defaultDiscountPercent != null
-                  ? String(row.original.defaultDiscountPercent)
+                promoEnd: row.original.promoEnd
+                  ? row.original.promoEnd.slice(0, 10)
                   : "",
-              promoName: row.original.promoName ?? "",
-              promoPrice:
-                row.original.promoPrice != null
-                  ? String(row.original.promoPrice)
-                  : "",
-              promoStart: row.original.promoStart
-                ? row.original.promoStart.slice(0, 10)
-                : "",
-              promoEnd: row.original.promoEnd
-                ? row.original.promoEnd.slice(0, 10)
-                : "",
-              isTaxable: row.original.isTaxable,
-              taxRate:
-                row.original.taxRate != null ? String(row.original.taxRate) : "",
-            });
-            setIsProductModalOpen(true);
-          }}
-        >
-          Edit
-        </Button>
+                isTaxable: row.original.isTaxable,
+                taxRate:
+                  row.original.taxRate != null ? String(row.original.taxRate) : "",
+                minStock: String(row.original.minStock ?? 0),
+              });
+              setIsProductModalOpen(true);
+            }}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openMinStockDialog(row.original)}
+          >
+            Set Min Stock
+          </Button>
+        </div>
       ),
     });
 
     return baseColumns;
-  }, [activeTaxRate, setFormState]);
+  }, [activeTaxRate, lowStockMap, openMinStockDialog, setFormState]);
 
   const table = useReactTable({
     data: filteredProducts,
@@ -522,14 +648,21 @@ export default function ProductManagementPage() {
                 return product.promoPrice
                   ? `${product.promoName ?? "Promo"} ${product.promoPrice}`
                   : "";
-              case "tax":
-                return product.isTaxable
-                  ? String(product.taxRate ?? activeTaxRate ?? 0)
-                  : "";
-              default:
-                return "";
-            }
-          })
+            case "tax":
+              return product.isTaxable
+                ? String(product.taxRate ?? activeTaxRate ?? 0)
+                : "";
+            case "minStock":
+              return String(product.minStock ?? 0);
+            case "stockStatus":
+              if ((product.minStock ?? 0) <= 0) {
+                return "Belum diatur";
+              }
+              return lowStockProductIds.has(product.id) ? "Low" : "Aman";
+            default:
+              return "";
+          }
+        })
           .join(","),
       )
       .join("\n");
@@ -552,6 +685,11 @@ export default function ProductManagementPage() {
   const handleSubmit = async () => {
     if (!formState.name || !formState.sku) {
       toast.error("Nama dan SKU wajib diisi");
+      return;
+    }
+    const parsedMinStock = Number(formState.minStock ?? 0);
+    if (!Number.isInteger(parsedMinStock) || parsedMinStock < 0) {
+      toast.error("Min stock harus bilangan bulat dan minimal 0");
       return;
     }
 
@@ -580,6 +718,7 @@ export default function ProductManagementPage() {
       promoEnd: formState.promoEnd ? new Date(formState.promoEnd).toISOString() : undefined,
       isTaxable: formState.isTaxable,
       taxRate: resolvedTaxRate,
+      minStock: parsedMinStock,
     };
 
     try {
@@ -628,6 +767,7 @@ export default function ProductManagementPage() {
       toast.error(message);
     }
   };
+
 
   const handleCategorySubmit = async () => {
     if (!categoryDraft.name.trim()) {
@@ -842,7 +982,7 @@ export default function ProductManagementPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[minmax(0,240px)_minmax(0,200px)_minmax(0,200px)] lg:items-end lg:gap-3">
+                  <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[minmax(0,240px)_minmax(0,200px)_minmax(0,200px)_minmax(0,240px)] lg:items-end lg:gap-3">
                     <div className="grid gap-1.5">
                       <label className="text-xs font-medium text-muted-foreground" htmlFor="search-products">
                         Cari produk
@@ -889,6 +1029,36 @@ export default function ProductManagementPage() {
                         ))}
                       </select>
                     </div>
+                    <div className="grid gap-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Filter stok
+                      </label>
+                      <Button
+                        variant={lowStockOnly ? "default" : "outline"}
+                        size="sm"
+                        disabled={!currentOutlet?.id}
+                        aria-pressed={lowStockOnly}
+                        onClick={() => setLowStockOnly((value) => !value)}
+                      >
+                        Tampilkan hanya yang Low Stock
+                        {currentOutlet?.id ? (
+                          <span
+                            className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              lowStockOnly
+                                ? "bg-secondary text-secondary-foreground"
+                                : "border border-border text-muted-foreground"
+                            }`}
+                          >
+                            {lowStockCount}
+                          </span>
+                        ) : null}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {currentOutlet
+                          ? "Saring produk dengan alert stok rendah pada outlet aktif."
+                          : "Pilih outlet untuk memantau alert stok rendah."}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -909,6 +1079,11 @@ export default function ProductManagementPage() {
                     </Button>
                   </div>
                 </div>
+                {!hasMinStockConfigured && !productsQuery.isLoading && (
+                  <div className="rounded-md border border-dashed border-amber-300 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
+                    Belum ada ambang minimum. Mulai atur minStock pada produk inti Anda.
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="font-semibold uppercase tracking-wide text-muted-foreground">
                     Kolom
@@ -1109,8 +1284,23 @@ export default function ProductManagementPage() {
                         <option key={supplier.id} value={supplier.id}>
                           {supplier.name}
                         </option>
-                      ))}
-                    </select>
+                        ))}
+                      </select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="minStock">Stok Minimum (minStock)</Label>
+                    <Input
+                      id="minStock"
+                      type="number"
+                      min={0}
+                      value={formState.minStock}
+                      onChange={(event) =>
+                        setFormState((state) => ({ ...state, minStock: event.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Sistem akan memicu alert ketika stok aktual &lt;= minStock.
+                    </p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="defaultDiscountPercent">Diskon Standar (%)</Label>
@@ -1215,6 +1405,55 @@ export default function ProductManagementPage() {
                     </Button>
                     <Button variant="outline" onClick={resetForm}>
                       Reset
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={isMinStockDialogOpen} onOpenChange={handleMinStockDialogClose}>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Atur Stok Minimum</DialogTitle>
+                  <DialogDescription>
+                    Ambang ini dipakai untuk memicu Low Stock Alert dan badge pada daftar produk.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    {minStockProduct
+                      ? `Produk: ${minStockProduct.name} (${minStockProduct.sku ?? "Tanpa SKU"})`
+                      : "Pilih produk untuk memperbarui ambang."}
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="modal-min-stock">Min Stock</Label>
+                    <Input
+                      id="modal-min-stock"
+                      type="number"
+                      min={0}
+                      value={minStockDraftValue}
+                      onChange={(event) => setMinStockDraftValue(event.target.value)}
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Sistem akan memicu LowStockAlert ketika stok aktual di outlet aktif berada di bawah angka ini.
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      disabled={setProductMinStock.isPending || !minStockProduct}
+                      onClick={() => void handleSaveMinStock()}
+                    >
+                      {setProductMinStock.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Menyimpan...
+                        </>
+                      ) : (
+                        "Simpan"
+                      )}
+                    </Button>
+                    <Button variant="outline" onClick={() => handleMinStockDialogClose(false)}>
+                      Batal
                     </Button>
                   </div>
                 </div>

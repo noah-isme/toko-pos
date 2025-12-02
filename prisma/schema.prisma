@@ -29,6 +29,12 @@ enum PaymentMethod {
   EWALLET
 }
 
+enum SaleStatus {
+  COMPLETED
+  VOIDED
+  REFUNDED
+}
+
 enum StockMovementType {
   ADJUSTMENT
   INITIAL
@@ -54,6 +60,7 @@ model CashSession {
 
   outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales  Sale[]
 
   @@index([outletId, closeTime])
   @@index([userId, closeTime])
@@ -78,6 +85,8 @@ model User {
   approvedTransfers StockTransfer[] @relation("TransferApprovedBy")
   cashSessions   CashSession[]
   stockMovements StockMovement[]
+  activityLogs   ActivityLog[]
+  refundsCreated Refund[] @relation("RefundCreatedBy")
 }
 
 model Account {
@@ -149,6 +158,9 @@ model Outlet {
   transfersFrom StockTransfer[] @relation("TransferFrom")
   transfersTo StockTransfer[] @relation("TransferTo")
   cashSessions CashSession[]
+  lowStockAlerts LowStockAlert[]
+  activityLogs   ActivityLog[]
+  stockMovements StockMovement[]
 }
 
 model Product {
@@ -167,6 +179,7 @@ model Product {
   promoEnd       DateTime?
   isTaxable      Boolean         @default(false)
   taxRate        Decimal?        @db.Decimal(5, 2)
+  minStock       Int             @default(0)
   categoryId     String?
   supplierId     String?
   createdAt      DateTime        @default(now())
@@ -176,6 +189,8 @@ model Product {
   inventoryLines Inventory[]
   saleItems      SaleItem[]
   stockTransfers StockTransfer[]
+  lowStockAlerts LowStockAlert[]
+  stockMovements StockMovement[]
 }
 
 model Inventory {
@@ -192,6 +207,21 @@ model Inventory {
   @@unique([productId, outletId])
 }
 
+model LowStockAlert {
+  id         String   @id @default(cuid())
+  productId  String
+  outletId   String
+  triggeredAt DateTime @default(now())
+  clearedAt  DateTime?
+  note       String?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  outlet  Outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, outletId, triggeredAt])
+  @@index([outletId, clearedAt])
+}
+
 model StockMovement {
   id             String            @id @default(cuid())
   inventoryId    String
@@ -201,8 +231,20 @@ model StockMovement {
   note           String?
   occurredAt     DateTime          @default(now())
   createdById    String?
+  productId      String?
+  outletId       String?
+  relatedSaleId  String?
+  relatedRefundId String?
   inventory      Inventory         @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   createdBy      User?             @relation(fields: [createdById], references: [id])
+  product        Product?          @relation(fields: [productId], references: [id])
+  outlet         Outlet?           @relation(fields: [outletId], references: [id])
+  sale           Sale?             @relation(fields: [relatedSaleId], references: [id])
+  refund         Refund?           @relation(fields: [relatedRefundId], references: [id])
+
+  @@index([productId, outletId, occurredAt])
+  @@index([relatedSaleId])
+  @@index([relatedRefundId])
 }
 
 model StockTransfer {
@@ -238,14 +280,19 @@ model Sale {
   taxAmount      Decimal?     @db.Decimal(12, 2)
   totalNet       Decimal      @db.Decimal(12, 2)
   soldAt         DateTime     @default(now())
-  status         String       @default("COMPLETED")
+  status         SaleStatus   @default(COMPLETED)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  sessionId      String?
   outlet         Outlet       @relation(fields: [outletId], references: [id])
   cashier        User?        @relation("SaleCashier", fields: [cashierId], references: [id])
+  session        CashSession? @relation(fields: [sessionId], references: [id])
   items          SaleItem[]
   payments       Payment[]
   refunds        Refund[]
+  stockMovements StockMovement[]
+
+  @@index([sessionId])
 }
 
 model SaleItem {
@@ -259,6 +306,7 @@ model SaleItem {
   total       Decimal  @db.Decimal(12, 2)
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product     Product  @relation(fields: [productId], references: [id])
+  refundItems RefundItem[]
 }
 
 model Payment {
@@ -272,14 +320,30 @@ model Payment {
 }
 
 model Refund {
-  id            String   @id @default(cuid())
-  saleId        String
-  amount        Decimal  @db.Decimal(12, 2)
-  reason        String?
-  approvedById  String?
-  processedAt   DateTime @default(now())
-  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  approvedBy    User?    @relation("RefundApprover", fields: [approvedById], references: [id])
+  id             String   @id @default(cuid())
+  saleId         String
+  amount         Decimal  @db.Decimal(12, 2)
+  reason         String?
+  approvedById   String?
+  processedAt    DateTime @default(now())
+  createdById    String?
+  sale           Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  approvedBy     User?    @relation("RefundApprover", fields: [approvedById], references: [id])
+  createdBy      User?    @relation("RefundCreatedBy", fields: [createdById], references: [id])
+  items          RefundItem[]
+  stockMovements StockMovement[]
+}
+
+model RefundItem {
+  id         String   @id @default(cuid())
+  refundId   String
+  saleItemId String
+  quantity   Int
+
+  refund   Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  saleItem SaleItem @relation(fields: [saleItemId], references: [id])
+
+  @@unique([refundId, saleItemId])
 }
 
 model DailyCashSummary {
@@ -297,6 +361,22 @@ model DailyCashSummary {
   @@unique([outletId, businessDay])
 }
 
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  outletId  String?
+  action    String
+  entity    String?
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id])
+  outlet Outlet? @relation(fields: [outletId], references: [id])
+
+  @@index([outletId, createdAt])
+  @@index([action, createdAt])
+}
 model TaxSetting {
   id        String   @id @default(cuid())
   name      String

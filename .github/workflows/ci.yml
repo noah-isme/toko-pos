@@ -39,7 +39,7 @@ jobs:
         with:
           version: 8
 
-      - name: Cache pnpm store
+      - name: Cache pnpm store and Prisma artifacts
         uses: actions/cache@v4
         with:
           path: |
@@ -47,6 +47,8 @@ jobs:
             ~/.pnpm-store
             .pnpm-store
             node_modules/.pnpm
+            node_modules
+            .prisma
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
@@ -75,14 +77,17 @@ jobs:
       - name: Run lint
         run: pnpm run lint
 
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
       - name: Run unit tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: pnpm run test:unit
-
-      - name: Build
-        run: pnpm run build
 
       - name: Install Playwright browsers
         # Install browsers required by Playwright so CI won't fail with missing executables

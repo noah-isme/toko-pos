@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import { PaymentMethod, Prisma } from "@/server/db/enums";
+import { PaymentMethod, Prisma, SaleStatus } from "@/server/db/enums";
 import {
   cashSessionSchema,
   cashSessionSummarySchema,
@@ -10,6 +10,7 @@ import {
 } from "@/server/api/schemas/cash-sessions";
 import { db } from "@/server/db";
 import { protectedProcedure, router } from "@/server/api/trpc";
+import { writeAuditLog } from "@/server/services/audit";
 
 const toDecimal = (value: number) => new Prisma.Decimal(value.toFixed(2));
 
@@ -101,6 +102,17 @@ export const cashSessionsRouter = router({
         },
       });
 
+      await writeAuditLog({
+        action: "SHIFT_OPEN",
+        userId,
+        outletId: input.outletId,
+        entity: "CASH_SESSION",
+        entityId: session.id,
+        details: {
+          openingCash: input.openingCash,
+        },
+      });
+
       return mapSession(session);
     }),
   close: protectedProcedure
@@ -141,7 +153,7 @@ export const cashSessionsRouter = router({
               gte: session.openTime,
               lte: now,
             },
-            status: "COMPLETED",
+            status: SaleStatus.COMPLETED,
           },
         },
       });
@@ -167,10 +179,58 @@ export const cashSessionsRouter = router({
 
       const parsed = mapSession(updated);
 
+      await writeAuditLog({
+        action: "SHIFT_CLOSE",
+        userId: updated.userId,
+        outletId: updated.outletId,
+        entity: "CASH_SESSION",
+        entityId: updated.id,
+        details: {
+          closingCash: input.closingCash,
+          expectedCash,
+          difference,
+        },
+      });
+
       return cashSessionSummarySchema.parse({
         ...parsed,
         cashSalesTotal,
       });
     }),
-});
+  list: protectedProcedure
+    .input(
+      z.object({
+        outletId: z.string().min(1),
+        from: z.string().datetime().optional(),
+        to: z.string().datetime().optional(),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ input }) => {
+      const rangeStart = input.from ? new Date(input.from) : undefined;
+      const rangeEnd = input.to ? new Date(input.to) : undefined;
 
+      const sessions = await db.cashSession.findMany({
+        where: {
+          outletId: input.outletId,
+          openTime: rangeStart
+            ? {
+                gte: rangeStart,
+                lte: rangeEnd ?? undefined,
+              }
+            : undefined,
+        },
+        include: {
+          user: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: {
+          openTime: "desc",
+        },
+        take: input.limit,
+      });
+
+      return sessions.map(mapSession);
+    }),
+});

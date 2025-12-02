@@ -54,10 +54,13 @@ export const setupTrpcMock = async (
   page: Page,
   handlers: Record<string, TrpcHandler>,
 ) => {
-  await page.route("**/api/trpc/**", async (route, request) => {
+  await page.route("**/api/trpc**", async (route, request) => {
     const url = new URL(request.url());
     const path = url.pathname.replace(/^\/?api\/?trpc\/?/, "");
     const procedures = path.split(",");
+    if (process.env.DEBUG_TRPC_MOCK === "true") {
+      console.info("[trpc-mock] intercepted", request.url(), procedures);
+    }
 
     // Read raw input payload (supports GET query param or POST body)
     let raw: unknown;

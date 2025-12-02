@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = process.env.PORT ?? "3000";
+const PORT = process.env.PORT ?? "5000";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -31,6 +31,7 @@ export default defineConfig({
       NEXTAUTH_SECRET: "test-secret",
       NEXT_PUBLIC_E2E: "true",
       DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/postgres",
+      NEXTAUTH_URL: `http://127.0.0.1:${PORT}`,
     },
   },
 });
