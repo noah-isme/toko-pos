@@ -56,6 +56,7 @@ export async function GET(
       barcode: product.barcode,
       description: product.description,
       price: Number(product.price),
+      sellingPrice: Number(product.price), // Add sellingPrice for frontend compatibility
       costPrice: product.costPrice ? Number(product.costPrice) : null,
       isActive: product.isActive,
       categoryId: product.categoryId,
@@ -66,14 +67,23 @@ export async function GET(
       defaultDiscountPercent: product.defaultDiscountPercent
         ? Number(product.defaultDiscountPercent)
         : null,
+      discount: product.defaultDiscountPercent
+        ? Number(product.defaultDiscountPercent)
+        : null,
       promoName: product.promoName,
       promoPrice: product.promoPrice ? Number(product.promoPrice) : null,
+      promoValue: product.promoPrice ? Number(product.promoPrice) : null,
       promoStart: product.promoStart?.toISOString(),
+      promoStartDate: product.promoStart?.toISOString(),
       promoEnd: product.promoEnd?.toISOString(),
+      promoEndDate: product.promoEnd?.toISOString(),
       isTaxable: product.isTaxable,
       taxRate: product.taxRate ? Number(product.taxRate) : null,
+      taxId: product.taxRate ? product.taxRate.toString() : null,
       image: null, // TODO: Add image support
       status: product.isActive ? "active" : "inactive",
+      unit: "", // Add unit field
+      tags: [], // Add tags field
       stocks: product.inventoryLines.map((inv) => ({
         outletId: inv.outletId,
         outlet: inv.outlet,
@@ -105,6 +115,24 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
+
+    console.log("Updating product:", id);
+    console.log("Request body:", JSON.stringify(body, null, 2));
+
+    // Validate required fields
+    if (!body.name || !body.sku) {
+      return NextResponse.json(
+        { error: "Name and SKU are required" },
+        { status: 400 },
+      );
+    }
+
+    if (!body.sellingPrice || parseFloat(body.sellingPrice) <= 0) {
+      return NextResponse.json(
+        { error: "Selling price must be greater than 0" },
+        { status: 400 },
+      );
+    }
 
     // Update product
     const product = await db.product.update({
@@ -185,8 +213,19 @@ export async function PUT(
     });
   } catch (error) {
     console.error("Error updating product:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to update product" },
+      {
+        error: "Failed to update product",
+        details: errorMessage,
+        stack:
+          process.env.NODE_ENV === "development"
+            ? error instanceof Error
+              ? error.stack
+              : undefined
+            : undefined,
+      },
       { status: 500 },
     );
   }

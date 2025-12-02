@@ -242,22 +242,33 @@ export default function EditProductPage() {
     setLoading(true);
 
     try {
+      const payload = {
+        ...formData,
+        costPrice: parseFloat(formData.costPrice) || 0,
+        sellingPrice: parseFloat(formData.sellingPrice) || 0,
+        outlets: outlets.map((o) => ({
+          outletId: o.outletId,
+          stock: o.stock,
+          minStock: o.minStock,
+        })),
+      };
+
+      console.log("Sending update payload:", payload);
+
       const response = await fetch(`/api/products/${params.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          costPrice: parseFloat(formData.costPrice) || 0,
-          sellingPrice: parseFloat(formData.sellingPrice) || 0,
-          outlets: outlets.map((o) => ({
-            outletId: o.outletId,
-            stock: o.stock,
-            minStock: o.minStock,
-          })),
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error("Gagal menyimpan produk");
+      const result = await response.json();
+      console.log("Update response:", result);
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || result.details || "Gagal menyimpan produk",
+        );
+      }
 
       toast({
         title: "Berhasil",
@@ -265,10 +276,14 @@ export default function EditProductPage() {
       });
 
       router.push("/management/products");
-    } catch {
+    } catch (error) {
+      console.error("Error saving product:", error);
       toast({
         title: "Error",
-        description: "Terjadi kesalahan saat menyimpan produk",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Terjadi kesalahan saat menyimpan produk",
         variant: "destructive",
       });
     } finally {
