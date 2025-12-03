@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type StockStatus = "low" | "normal" | "unset";
+type StockStatus = "low" | "normal" | "unset" | "out";
 
 export type ProductTableRow = {
   id: string;
@@ -87,7 +87,7 @@ const StockStatusBadge = ({ status }: { status: StockStatus }) => {
   const config = {
     low: {
       variant: "destructive" as const,
-      label: "Low",
+      label: "Low Stock",
       className:
         "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
     },
@@ -102,6 +102,12 @@ const StockStatusBadge = ({ status }: { status: StockStatus }) => {
       label: "Belum Diatur",
       className:
         "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
+    },
+    out: {
+      variant: "destructive" as const,
+      label: "Habis",
+      className:
+        "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
     },
   };
 
@@ -219,11 +225,13 @@ export function PremiumProductTable({
                   <TableCell className="py-4">
                     <span
                       className={`font-bold text-lg ${
-                        product.status === "low"
-                          ? "text-orange-600"
-                          : product.status === "normal"
-                            ? "text-foreground"
-                            : "text-muted-foreground"
+                        product.status === "out"
+                          ? "text-red-600"
+                          : product.status === "low"
+                            ? "text-orange-600"
+                            : product.status === "normal"
+                              ? "text-foreground"
+                              : "text-muted-foreground"
                       }`}
                     >
                       {product.stock}

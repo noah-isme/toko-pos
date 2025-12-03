@@ -17,7 +17,37 @@ const lowStockAlertSchema = z.object({
   note: z.string().nullable(),
 });
 
+const inventoryItemSchema = z.object({
+  productId: z.string(),
+  quantity: z.number(),
+});
+
 export const inventoryRouter = router({
+  getAllInventory: protectedProcedure
+    .input(
+      z.object({
+        outletId: z.string().min(1),
+      }),
+    )
+    .output(z.array(inventoryItemSchema))
+    .query(async ({ input }) => {
+      const inventories = await db.inventory.findMany({
+        where: {
+          outletId: input.outletId,
+        },
+        select: {
+          productId: true,
+          quantity: true,
+        },
+      });
+
+      return inventories.map((inv) =>
+        inventoryItemSchema.parse({
+          productId: inv.productId,
+          quantity: inv.quantity,
+        }),
+      );
+    }),
   setProductMinStock: protectedProcedure
     .input(
       z.object({

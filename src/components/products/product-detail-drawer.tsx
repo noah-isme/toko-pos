@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type StockStatus = "low" | "normal" | "unset";
+type StockStatus = "low" | "normal" | "unset" | "out";
 
 type InventoryRecord = {
   outletId: string;
@@ -115,6 +115,11 @@ const StockStatusIndicator = ({ status }: { status: StockStatus }) => {
       color: "text-gray-400",
       bg: "bg-gray-400/10",
       label: "Belum Diatur",
+    },
+    out: {
+      color: "text-red-500",
+      bg: "bg-red-500/10",
+      label: "Habis",
     },
   };
 

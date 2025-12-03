@@ -63,6 +63,12 @@ export default function ProductManagementPage() {
     { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
   );
 
+  // Get all inventory data for current outlet
+  const inventoryQuery = api.inventory.getAllInventory.useQuery(
+    { outletId: currentOutlet?.id ?? "" },
+    { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
+  );
+
   const products = useMemo(
     () => productsQuery.data ?? [],
     [productsQuery.data],
@@ -80,6 +86,15 @@ export default function ProductManagementPage() {
     [lowStockQuery.data],
   );
 
+  // Create inventory map for quick lookup
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (inventoryQuery.data ?? []).forEach((inv) => {
+      map.set(inv.productId, inv.quantity);
+    });
+    return map;
+  }, [inventoryQuery.data]);
+
   // Low stock map
   const lowStockProductIds = useMemo(() => {
     return new Set(lowStockAlerts.map((alert) => alert.productId));
@@ -89,10 +104,8 @@ export default function ProductManagementPage() {
   const tableRows = useMemo((): ProductTableRow[] => {
     return products.map((product) => {
       const isLowStock = lowStockProductIds.has(product.id);
-      const lowStockAlert = lowStockAlerts.find(
-        (alert) => alert.productId === product.id,
-      );
-      const totalStock = lowStockAlert?.quantity ?? 0;
+      // Get actual stock from inventory map
+      const totalStock = inventoryMap.get(product.id) ?? 0;
 
       return {
         id: product.id,
@@ -105,14 +118,18 @@ export default function ProductManagementPage() {
           ? "low"
           : product.minStock === 0
             ? "unset"
-            : "normal",
+            : totalStock > product.minStock
+              ? "normal"
+              : totalStock === 0
+                ? "out"
+                : "low",
         supplier: product.supplier || undefined,
         discount: product.defaultDiscountPercent || undefined,
         promo: product.promoName || undefined,
         taxRate: product.isTaxable ? product.taxRate || undefined : undefined,
       };
     });
-  }, [products, lowStockProductIds, lowStockAlerts]);
+  }, [products, lowStockProductIds, inventoryMap]);
 
   // Filtered and sorted products
   const filteredProducts = useMemo(() => {
