@@ -69,6 +69,16 @@ export default function ProductManagementPage() {
     { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
   );
 
+  // Debug logging
+  console.log("🔍 DEBUG - Current Outlet:", currentOutlet);
+  console.log("🔍 DEBUG - Inventory Query Status:", {
+    isLoading: inventoryQuery.isLoading,
+    isError: inventoryQuery.isError,
+    error: inventoryQuery.error,
+    dataLength: inventoryQuery.data?.length ?? 0,
+  });
+  console.log("🔍 DEBUG - Inventory Data:", inventoryQuery.data);
+
   const products = useMemo(
     () => productsQuery.data ?? [],
     [productsQuery.data],
@@ -92,6 +102,7 @@ export default function ProductManagementPage() {
     (inventoryQuery.data ?? []).forEach((inv) => {
       map.set(inv.productId, inv.quantity);
     });
+    console.log("🔍 DEBUG - Inventory Map:", Array.from(map.entries()));
     return map;
   }, [inventoryQuery.data]);
 
@@ -102,10 +113,20 @@ export default function ProductManagementPage() {
 
   // Transform products to table rows
   const tableRows = useMemo((): ProductTableRow[] => {
-    return products.map((product) => {
+    console.log("🔍 DEBUG - Building table rows...");
+    console.log("🔍 DEBUG - Products count:", products.length);
+    console.log("🔍 DEBUG - Inventory map size:", inventoryMap.size);
+
+    const rows = products.map((product) => {
       const isLowStock = lowStockProductIds.has(product.id);
       // Get actual stock from inventory map
       const totalStock = inventoryMap.get(product.id) ?? 0;
+
+      if (products.indexOf(product) < 3) {
+        console.log(
+          `🔍 DEBUG - Product: ${product.name}, ID: ${product.id}, Stock: ${totalStock}`,
+        );
+      }
 
       return {
         id: product.id,
@@ -114,7 +135,7 @@ export default function ProductManagementPage() {
         sku: product.sku,
         price: product.price,
         stock: totalStock,
-        status: isLowStock
+        status: (isLowStock
           ? "low"
           : product.minStock === 0
             ? "unset"
@@ -122,13 +143,19 @@ export default function ProductManagementPage() {
               ? "normal"
               : totalStock === 0
                 ? "out"
-                : "low",
+                : "low") as "low" | "normal" | "unset" | "out",
         supplier: product.supplier || undefined,
         discount: product.defaultDiscountPercent || undefined,
         promo: product.promoName || undefined,
         taxRate: product.isTaxable ? product.taxRate || undefined : undefined,
       };
     });
+
+    console.log(
+      "🔍 DEBUG - First 3 rows stock values:",
+      rows.slice(0, 3).map((r) => ({ name: r.name, stock: r.stock })),
+    );
+    return rows;
   }, [products, lowStockProductIds, inventoryMap]);
 
   // Filtered and sorted products
