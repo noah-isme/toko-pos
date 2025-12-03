@@ -245,16 +245,34 @@ export const productsRouter = router({
     .input(productByBarcodeInputSchema)
     .output(productByBarcodeOutputSchema)
     .query(async ({ input }) => {
-      const product = await db.product.findFirst({
+      // Try to find by barcode first (exact match)
+      let product = await db.product.findFirst({
         where: {
           barcode: input.barcode,
           isActive: true,
         },
       });
 
+      // If not found by barcode, search by name or SKU (case-insensitive)
       if (!product) {
-      return productByBarcodeOutputSchema.parse(null);
-    }
+        product = await db.product.findFirst({
+          where: {
+            isActive: true,
+            OR: [
+              { name: { contains: input.barcode, mode: "insensitive" } },
+              { sku: { contains: input.barcode, mode: "insensitive" } },
+            ],
+          },
+          orderBy: [
+            // Prioritize exact matches
+            { name: "asc" },
+          ],
+        });
+      }
+
+      if (!product) {
+        return productByBarcodeOutputSchema.parse(null);
+      }
 
       return productByBarcodeOutputSchema.parse({
         id: product.id,
@@ -281,7 +299,9 @@ export const productsRouter = router({
           categoryId: input.categoryId,
           supplierId: input.supplierId,
           isActive: input.isActive,
-          defaultDiscountPercent: toDecimal(input.defaultDiscountPercent ?? undefined),
+          defaultDiscountPercent: toDecimal(
+            input.defaultDiscountPercent ?? undefined,
+          ),
           promoName: input.promoName,
           promoPrice: toDecimal(input.promoPrice ?? undefined),
           promoStart: input.promoStart ? new Date(input.promoStart) : null,
@@ -300,7 +320,9 @@ export const productsRouter = router({
           categoryId: input.categoryId,
           supplierId: input.supplierId,
           isActive: input.isActive,
-          defaultDiscountPercent: toDecimal(input.defaultDiscountPercent ?? undefined),
+          defaultDiscountPercent: toDecimal(
+            input.defaultDiscountPercent ?? undefined,
+          ),
           promoName: input.promoName,
           promoPrice: toDecimal(input.promoPrice ?? undefined),
           promoStart: input.promoStart ? new Date(input.promoStart) : undefined,
@@ -371,7 +393,10 @@ export const productsRouter = router({
           },
         });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003"
+        ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Kategori masih digunakan oleh produk lain.",
@@ -441,7 +466,10 @@ export const productsRouter = router({
           },
         });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003"
+        ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Supplier masih digunakan oleh produk lain.",
