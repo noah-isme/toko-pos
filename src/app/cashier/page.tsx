@@ -41,6 +41,7 @@ import {
 import { cacheProducts, getCachedProductByBarcode } from "@/lib/catalog-cache";
 import { cn } from "@/lib/utils";
 import { api } from "@/trpc/client";
+import { ProductSearchAutocomplete } from "@/components/cashier/product-search-autocomplete";
 
 const DEFAULT_PAYMENT_METHOD: PaymentMethod = "CASH";
 const QRIS_PAYMENT_METHOD: PaymentMethod = "QRIS";
@@ -134,7 +135,10 @@ export default function CashierPage() {
     { barcode },
     { enabled: false, retry: 0 },
   );
-  const catalogQuery = api.products.list.useQuery({ take: 100 }, { staleTime: 300_000 });
+  const catalogQuery = api.products.list.useQuery(
+    { take: 100 },
+    { staleTime: 300_000 },
+  );
   const recordSale = api.sales.recordSale.useMutation();
   const printReceipt = api.sales.printReceipt.useMutation();
   const recentSales = api.sales.listRecent.useQuery({ limit: 5 });
@@ -150,12 +154,15 @@ export default function CashierPage() {
     note: string;
   };
 
-  const [afterSalesAction, setAfterSalesAction] = useState<AfterSalesActionState | null>(null);
+  const [afterSalesAction, setAfterSalesAction] =
+    useState<AfterSalesActionState | null>(null);
   const [isOpenShiftModalOpen, setOpenShiftModalOpen] = useState(false);
   const [isCloseShiftModalOpen, setCloseShiftModalOpen] = useState(false);
   const [openingCashInput, setOpeningCashInput] = useState("");
   const [closingCashInput, setClosingCashInput] = useState("");
-  const [closeSummary, setCloseSummary] = useState<CloseSessionResult | null>(null);
+  const [closeSummary, setCloseSummary] = useState<CloseSessionResult | null>(
+    null,
+  );
   const activeSession = activeShift ?? null;
 
   useEffect(() => {
@@ -232,7 +239,8 @@ export default function CashierPage() {
 
   useEffect(() => () => clearQrisTimeout(), [clearQrisTimeout]);
 
-  const isProcessingAfterSales = voidSaleMutation.isPending || refundSaleMutation.isPending;
+  const isProcessingAfterSales =
+    voidSaleMutation.isPending || refundSaleMutation.isPending;
 
   const handleOpenShift = async () => {
     if (!activeOutletId) {
@@ -254,7 +262,8 @@ export default function CashierPage() {
       setOpeningCashInput("");
       await refreshShift();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal membuka shift.";
+      const message =
+        error instanceof Error ? error.message : "Gagal membuka shift.";
       toast.error(message);
     }
   };
@@ -278,7 +287,8 @@ export default function CashierPage() {
       toast.success("Shift kasir ditutup.");
       await refreshShift();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal menutup shift.";
+      const message =
+        error instanceof Error ? error.message : "Gagal menutup shift.";
       toast.error(message);
     }
   };
@@ -292,7 +302,9 @@ export default function CashierPage() {
   };
 
   const updateAfterSalesNote = (value: string) => {
-    setAfterSalesAction((current) => (current ? { ...current, note: value } : current));
+    setAfterSalesAction((current) =>
+      current ? { ...current, note: value } : current,
+    );
   };
 
   const handleConfirmAfterSales = async () => {
@@ -327,7 +339,8 @@ export default function CashierPage() {
       await recentSales.refetch();
       setAfterSalesAction(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal memproses tindakan.";
+      const message =
+        error instanceof Error ? error.message : "Gagal memproses tindakan.";
       toast.error(message);
       setLiveMessage(message);
     }
@@ -344,7 +357,8 @@ export default function CashierPage() {
       0,
     );
     const itemDiscounts = cart.reduce((sum, item) => {
-      const discountAmount = (item.price * item.quantity * item.discountPercent) / 100;
+      const discountAmount =
+        (item.price * item.quantity * item.discountPercent) / 100;
       return sum + discountAmount;
     }, 0);
     const totalDiscount = itemDiscounts + manualDiscount;
@@ -388,86 +402,88 @@ export default function CashierPage() {
     };
   }, [paymentMethod, totals.totalNet]);
 
-  const addProductToCart = useCallback(async () => {
-    const code = barcode.trim();
-    if (!code) return;
+  const addProductToCart = useCallback(
+    (product: {
+      id: string;
+      name: string;
+      sku: string;
+      barcode: string | null;
+      price: number;
+    }) => {
+      try {
+        setCart((prev) => {
+          const existing = prev.find((item) => item.productId === product.id);
+          if (existing) {
+            return prev.map((item) =>
+              item.productId === product.id
+                ? { ...item, quantity: item.quantity + 1 }
+                : item,
+            );
+          }
+          return [
+            ...prev,
+            {
+              productId: product.id,
+              name: product.name,
+              price: product.price,
+              quantity: 1,
+              discountPercent: 0,
+            },
+          ];
+        });
 
-    try {
-      let product = await getCachedProductByBarcode(code);
+        setLiveMessage(`${product.name} ditambahkan ke keranjang.`);
+        toast.success(`${product.name} ditambahkan`);
 
-      if (!product) {
-        const result = await productLookup.refetch();
-        const fetched = result.data;
-
-        if (!fetched) {
-          toast.error("Produk tidak ditemukan");
-          setLiveMessage("Produk tidak ditemukan.");
-          return;
+        // Cache product for faster future lookups
+        if (product.barcode) {
+          void cacheProducts([
+            {
+              id: product.id,
+              name: product.name,
+              sku: product.sku,
+              barcode: product.barcode,
+              price: product.price,
+            },
+          ]);
         }
-
-        product = {
-          id: fetched.id,
-          name: fetched.name,
-          sku: fetched.sku,
-          barcode: code,
-          price: fetched.price,
-        };
-        void cacheProducts([product]);
+      } catch (error) {
+        console.error(error);
+        toast.error("Gagal menambahkan produk");
+        setLiveMessage("Gagal menambahkan produk.");
       }
+    },
+    [],
+  );
 
-      setCart((prev) => {
-        const existing = prev.find((item) => item.productId === product!.id);
-        if (existing) {
-          return prev.map((item) =>
-            item.productId === product!.id
-              ? { ...item, quantity: item.quantity + 1 }
-              : item,
-          );
-        }
-        return [
-          ...prev,
-          {
-            productId: product!.id,
-            name: product!.name,
-            price: product!.price,
-            quantity: 1,
-            discountPercent: 0,
-          },
-        ];
-      });
+  const updateItemQuantity = useCallback(
+    (productId: string, quantity: number) => {
+      const safeQuantity = Number.isNaN(quantity) ? 1 : quantity;
+      setCart((prev) =>
+        prev.map((item) =>
+          item.productId === productId
+            ? { ...item, quantity: Math.max(safeQuantity, 1) }
+            : item,
+        ),
+      );
+    },
+    [],
+  );
 
-      setBarcode("");
-      setLiveMessage(`${product.name} ditambahkan ke keranjang.`);
-      barcodeInputRef.current?.focus();
-    } catch (error) {
-      console.error(error);
-      toast.error("Gagal menambahkan produk");
-      setLiveMessage("Gagal menambahkan produk.");
-    }
-  }, [barcode, productLookup]);
-
-  const updateItemQuantity = useCallback((productId: string, quantity: number) => {
-    const safeQuantity = Number.isNaN(quantity) ? 1 : quantity;
-    setCart((prev) =>
-      prev.map((item) =>
-        item.productId === productId
-          ? { ...item, quantity: Math.max(safeQuantity, 1) }
-          : item,
-      ),
-    );
-  }, []);
-
-  const updateItemDiscountPercent = useCallback((productId: string, discountPercent: number) => {
-    const safeDiscount = Number.isNaN(discountPercent) ? 0 : discountPercent;
-    const clamped = Math.min(Math.max(safeDiscount, 0), 100);
-    setCart((prev) =>
-      prev.map((item) =>
-        item.productId === productId
-          ? { ...item, discountPercent: clamped }
-          : item,
-      ),
-    );
-  }, []);
+  const updateItemDiscountPercent = useCallback(
+    (productId: string, discountPercent: number) => {
+      const safeDiscount = Number.isNaN(discountPercent) ? 0 : discountPercent;
+      const clamped = Math.min(Math.max(safeDiscount, 0), 100);
+      setCart((prev) =>
+        prev.map((item) =>
+          item.productId === productId
+            ? { ...item, discountPercent: clamped }
+            : item,
+        ),
+      );
+    },
+    [],
+  );
 
   const removeItem = useCallback((productId: string) => {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
@@ -513,9 +529,7 @@ export default function CashierPage() {
 
     if (isQris) {
       resolvedReference =
-        trimmedReference.length > 0
-          ? trimmedReference
-          : `QR-${Date.now()}`;
+        trimmedReference.length > 0 ? trimmedReference : `QR-${Date.now()}`;
       if (trimmedReference.length === 0) {
         setPaymentReference(resolvedReference);
       }
@@ -602,7 +616,9 @@ export default function CashierPage() {
 
       const receipt = await printReceipt.mutateAsync({ saleId: sale.id });
       const byteCharacters = atob(receipt.base64);
-      const byteNumbers = Array.from(byteCharacters, (char) => char.charCodeAt(0));
+      const byteNumbers = Array.from(byteCharacters, (char) =>
+        char.charCodeAt(0),
+      );
       const file = new Blob([new Uint8Array(byteNumbers)], {
         type: "application/pdf",
       });
@@ -666,12 +682,7 @@ export default function CashierPage() {
     }
 
     void finalizeCheckout();
-  }, [
-    checkoutState,
-    paymentMethod,
-    clearQrisTimeout,
-    finalizeCheckout,
-  ]);
+  }, [checkoutState, paymentMethod, clearQrisTimeout, finalizeCheckout]);
 
   const handleCancelQrisWaiting = useCallback(() => {
     clearQrisTimeout();
@@ -726,8 +737,8 @@ export default function CashierPage() {
               {isShiftLoading
                 ? "Memuat status shift kasir..."
                 : activeSession
-                    ? `Shift dibuka oleh ${activeSession.user?.name ?? "Kasir"} pukul ${format(new Date(activeSession.openTime), "HH:mm")}`
-                    : "Belum ada shift aktif. Buka shift sebelum transaksi."}
+                  ? `Shift dibuka oleh ${activeSession.user?.name ?? "Kasir"} pukul ${format(new Date(activeSession.openTime), "HH:mm")}`
+                  : "Belum ada shift aktif. Buka shift sebelum transaksi."}
             </p>
             <p className="text-xs text-muted-foreground">
               {activeSession
@@ -789,7 +800,8 @@ export default function CashierPage() {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-4 py-3 text-sm">
                 <div className="font-medium text-muted-foreground">
-                  Total Item: {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                  Total Item:{" "}
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
                 </div>
                 <div className="text-right text-foreground">
                   Total Belanja:
@@ -808,12 +820,14 @@ export default function CashierPage() {
                   id="outlet"
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   value={activeOutletId ?? ""}
-            onChange={(event) => {
-              const selected = outlets.find((outlet) => outlet.id === event.target.value);
-              if (selected) {
-                setCurrentOutlet(selected);
-              }
-            }}
+                  onChange={(event) => {
+                    const selected = outlets.find(
+                      (outlet) => outlet.id === event.target.value,
+                    );
+                    if (selected) {
+                      setCurrentOutlet(selected);
+                    }
+                  }}
                 >
                   {outlets.map((outlet) => (
                     <option key={outlet.id} value={outlet.id}>
@@ -823,31 +837,14 @@ export default function CashierPage() {
                 </select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="barcode">Scan / Cari Produk</Label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Input
-                    id="barcode"
-                    ref={barcodeInputRef}
-                    value={barcode}
-                    onChange={(event) => setBarcode(event.target.value)}
-                    placeholder="Scan barcode atau ketik nama produk"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void addProductToCart();
-                      }
-                    }}
-                    aria-describedby="scan-helper"
-                  />
-                  <Button
-                    className="sm:w-auto"
-                    onClick={() => void addProductToCart()}
-                  >
-                    Tambah (F1)
-                  </Button>
-                </div>
-                <p id="scan-helper" className="text-xs text-muted-foreground">
-                  Ctrl+K untuk fokus cepat ke input scan.
+                <Label htmlFor="product-search">Scan / Cari Produk</Label>
+                <ProductSearchAutocomplete
+                  onProductSelect={addProductToCart}
+                  placeholder="Ketik nama produk, SKU, atau scan barcode"
+                  autoFocus={true}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ketik minimal 2 huruf untuk melihat rekomendasi produk
                 </p>
               </div>
             </div>
@@ -867,30 +864,30 @@ export default function CashierPage() {
                   </TableHeader>
                   <MotionTableBody>
                     {cart.map((item) => (
-                    <MotionTableRow key={item.productId} className="border-b">
-                      <TableCell className="font-medium">
-                        {item.name}
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min={1}
-                          inputMode="numeric"
-                          value={item.quantity}
-                          onChange={(event) =>
-                            updateItemQuantity(
-                              item.productId,
-                              Number(event.target.value),
-                            )
-                          }
-                          className="h-9 text-right"
-                          aria-label={`Jumlah untuk ${item.name}`}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(item.price)}
-                      </TableCell>
-                      <TableCell>
+                      <MotionTableRow key={item.productId} className="border-b">
+                        <TableCell className="font-medium">
+                          {item.name}
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={1}
+                            inputMode="numeric"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              updateItemQuantity(
+                                item.productId,
+                                Number(event.target.value),
+                              )
+                            }
+                            className="h-9 text-right"
+                            aria-label={`Jumlah untuk ${item.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(item.price)}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <Input
                               type="number"
@@ -907,38 +904,41 @@ export default function CashierPage() {
                               className="h-9 w-20 text-right"
                               aria-label={`Diskon untuk ${item.name}`}
                             />
-                            <span className="text-sm text-muted-foreground">%</span>
+                            <span className="text-sm text-muted-foreground">
+                              %
+                            </span>
                           </div>
                           <p className="mt-1 text-right text-xs text-muted-foreground">
                             -{formatCurrency(calculateItemDiscount(item))}
                           </p>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(
-                          item.price * item.quantity - calculateItemDiscount(item),
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeItem(item.productId)}
-                        >
-                          Hapus
-                        </Button>
-                      </TableCell>
-                    </MotionTableRow>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(
+                            item.price * item.quantity -
+                              calculateItemDiscount(item),
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeItem(item.productId)}
+                          >
+                            Hapus
+                          </Button>
+                        </TableCell>
+                      </MotionTableRow>
                     ))}
                     {cart.length === 0 && (
-                    <MotionTableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center text-sm text-muted-foreground"
-                      >
-                        Keranjang kosong. Scan barcode atau cari produk.
-                      </TableCell>
-                    </MotionTableRow>
+                      <MotionTableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="text-center text-sm text-muted-foreground"
+                        >
+                          Keranjang kosong. Scan barcode atau cari produk.
+                        </TableCell>
+                      </MotionTableRow>
                     )}
                   </MotionTableBody>
                 </Table>
@@ -1025,21 +1025,21 @@ export default function CashierPage() {
                   </div>
                   {paymentMethod !== DEFAULT_PAYMENT_METHOD &&
                     paymentMethod !== QRIS_PAYMENT_METHOD && (
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="payment-reference" className="text-xs">
-                        Referensi Pembayaran
-                      </Label>
-                      <Input
-                        id="payment-reference"
-                        placeholder="Masukkan nomor referensi"
-                        value={paymentReference}
-                        onChange={(event) =>
-                          setPaymentReference(event.target.value)
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                  )}
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="payment-reference" className="text-xs">
+                          Referensi Pembayaran
+                        </Label>
+                        <Input
+                          id="payment-reference"
+                          placeholder="Masukkan nomor referensi"
+                          value={paymentReference}
+                          onChange={(event) =>
+                            setPaymentReference(event.target.value)
+                          }
+                          className="h-9"
+                        />
+                      </div>
+                    )}
                 </div>
                 <Badge variant="secondary" className="w-fit">
                   {paymentMethod === DEFAULT_PAYMENT_METHOD
@@ -1168,7 +1168,8 @@ export default function CashierPage() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Total {formatCurrency(totals.totalNet)} · Otomatis sukses dalam 3 detik setelah Bayar.
+                            Total {formatCurrency(totals.totalNet)} · Otomatis
+                            sukses dalam 3 detik setelah Bayar.
                           </p>
                         </section>
                       )}
@@ -1226,7 +1227,8 @@ export default function CashierPage() {
                                 </span>
                                 <span>
                                   {formatCurrency(
-                                    item.price * item.quantity - calculateItemDiscount(item),
+                                    item.price * item.quantity -
+                                      calculateItemDiscount(item),
                                   )}
                                 </span>
                               </div>
@@ -1272,9 +1274,12 @@ export default function CashierPage() {
                       <div className="flex flex-col items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-6 text-sm text-blue-900">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <div className="space-y-1">
-                          <p className="text-base font-semibold">Menunggu Pembayaran QRIS…</p>
+                          <p className="text-base font-semibold">
+                            Menunggu Pembayaran QRIS…
+                          </p>
                           <p className="text-xs text-blue-900/80">
-                            Simulasi akan menyelesaikan pembayaran secara otomatis.
+                            Simulasi akan menyelesaikan pembayaran secara
+                            otomatis.
                           </p>
                         </div>
                       </div>
@@ -1295,7 +1300,8 @@ export default function CashierPage() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Tidak perlu konfirmasi manual — kasir dapat menunggu hingga transaksi tersimpan.
+                        Tidak perlu konfirmasi manual — kasir dapat menunggu
+                        hingga transaksi tersimpan.
                       </p>
                     </div>
                   )}
@@ -1337,7 +1343,9 @@ export default function CashierPage() {
                         <Button
                           type="button"
                           onClick={handleProcessPayment}
-                          disabled={recordSale.isPending || printReceipt.isPending}
+                          disabled={
+                            recordSale.isPending || printReceipt.isPending
+                          }
                         >
                           {recordSale.isPending || printReceipt.isPending
                             ? "Memproses..."
@@ -1390,116 +1398,123 @@ export default function CashierPage() {
                 </DialogContent>
               </Dialog>
             </CardContent>
-        </Card>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Transaksi Terakhir</CardTitle>
-            <CardDescription>
-              Refund atau void dengan ringkasan stok yang kembali.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {recentSales.isLoading ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Memuat transaksi…
-              </div>
-            ) : recentSales.isError ? (
-              <div className="space-y-2 text-sm text-destructive">
-                <p>Gagal memuat transaksi terbaru.</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => recentSales.refetch()}
-                >
-                  Coba lagi
-                </Button>
-              </div>
-            ) : (recentSales.data ?? []).length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                Belum ada transaksi yang tercatat.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {(recentSales.data ?? []).map((sale) => {
-                  const formattedTotal = formatCurrency(sale.totalNet);
-                  const isActionAvailable = sale.status === "COMPLETED";
-                  const statusLabel = (() => {
-                    switch (sale.status) {
-                      case "VOIDED":
-                        return "Void";
-                      case "REFUNDED":
-                        return "Refund";
-                      default:
-                        return "Selesai";
-                    }
-                  })();
+          <Card>
+            <CardHeader>
+              <CardTitle>Transaksi Terakhir</CardTitle>
+              <CardDescription>
+                Refund atau void dengan ringkasan stok yang kembali.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {recentSales.isLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memuat transaksi…
+                </div>
+              ) : recentSales.isError ? (
+                <div className="space-y-2 text-sm text-destructive">
+                  <p>Gagal memuat transaksi terbaru.</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => recentSales.refetch()}
+                  >
+                    Coba lagi
+                  </Button>
+                </div>
+              ) : (recentSales.data ?? []).length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  Belum ada transaksi yang tercatat.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(recentSales.data ?? []).map((sale) => {
+                    const formattedTotal = formatCurrency(sale.totalNet);
+                    const isActionAvailable = sale.status === "COMPLETED";
+                    const statusLabel = (() => {
+                      switch (sale.status) {
+                        case "VOIDED":
+                          return "Void";
+                        case "REFUNDED":
+                          return "Refund";
+                        default:
+                          return "Selesai";
+                      }
+                    })();
 
-                  return (
-                    <div
-                      key={sale.id}
-                      className="rounded-lg border border-dashed border-border bg-muted/10 p-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-foreground">
-                            {sale.receiptNumber}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(sale.soldAt).toLocaleString("id-ID")} · {sale.totalItems} item · {formattedTotal}
-                          </p>
-                          {sale.status !== "COMPLETED" ? (
-                            <p className="text-xs font-medium uppercase tracking-wide text-orange-600">
-                              Status: {statusLabel}
+                    return (
+                      <div
+                        key={sale.id}
+                        className="rounded-lg border border-dashed border-border bg-muted/10 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">
+                              {sale.receiptNumber}
                             </p>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            disabled={!isActionAvailable || isProcessingAfterSales}
-                            onClick={() => openAfterSalesDialog(sale, "refund")}
-                          >
-                            Refund
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={!isActionAvailable || isProcessingAfterSales}
-                            onClick={() => openAfterSalesDialog(sale, "void")}
-                          >
-                            Void
-                          </Button>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(sale.soldAt).toLocaleString("id-ID")} ·{" "}
+                              {sale.totalItems} item · {formattedTotal}
+                            </p>
+                            {sale.status !== "COMPLETED" ? (
+                              <p className="text-xs font-medium uppercase tracking-wide text-orange-600">
+                                Status: {statusLabel}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={
+                                !isActionAvailable || isProcessingAfterSales
+                              }
+                              onClick={() =>
+                                openAfterSalesDialog(sale, "refund")
+                              }
+                            >
+                              Refund
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={
+                                !isActionAvailable || isProcessingAfterSales
+                              }
+                              onClick={() => openAfterSalesDialog(sale, "void")}
+                            >
+                              Void
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Tips Operasional</CardTitle>
-            <CardDescription>
-              Micro-interaction yang membantu kasir.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-xs text-muted-foreground">
-            <p>• Pastikan SKU populer di-pin di rak untuk scan cepat.</p>
-            <p>• Gunakan shortcut F2 untuk mengurangi waktu antrian.</p>
-            <p>• Konfirmasi refund/void hanya setelah cek stok fisik.</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Tips Operasional</CardTitle>
+              <CardDescription>
+                Micro-interaction yang membantu kasir.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs text-muted-foreground">
+              <p>• Pastikan SKU populer di-pin di rak untuk scan cepat.</p>
+              <p>• Gunakan shortcut F2 untuk mengurangi waktu antrian.</p>
+              <p>• Konfirmasi refund/void hanya setelah cek stok fisik.</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
 
       <Dialog open={isOpenShiftModalOpen} onOpenChange={setOpenShiftModalOpen}>
         <DialogContent className="max-w-md">
@@ -1525,7 +1540,8 @@ export default function CashierPage() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Nilai ini menjadi baseline perhitungan selisih kas saat shift ditutup.
+              Nilai ini menjadi baseline perhitungan selisih kas saat shift
+              ditutup.
             </p>
           </div>
           <DialogFooter className="gap-2">
@@ -1551,12 +1567,16 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCloseShiftModalOpen} onOpenChange={setCloseShiftModalOpen}>
+      <Dialog
+        open={isCloseShiftModalOpen}
+        onOpenChange={setCloseShiftModalOpen}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Tutup Shift Kasir</DialogTitle>
             <DialogDescription>
-              Konfirmasi kas akhir dan catat selisih dibandingkan pencatatan sistem.
+              Konfirmasi kas akhir dan catat selisih dibandingkan pencatatan
+              sistem.
             </DialogDescription>
           </DialogHeader>
           {closeSummary ? (
@@ -1605,7 +1625,8 @@ export default function CashierPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Masukkan nominal kas di laci untuk menghitung selisih dengan catatan sistem.
+                Masukkan nominal kas di laci untuk menghitung selisih dengan
+                catatan sistem.
               </p>
             </div>
           )}
@@ -1673,7 +1694,11 @@ export default function CashierPage() {
                     {afterSalesAction.sale.receiptNumber}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(afterSalesAction.sale.soldAt).toLocaleString("id-ID")} · {afterSalesAction.sale.totalItems} item · {formatCurrency(afterSalesAction.sale.totalNet)}
+                    {new Date(afterSalesAction.sale.soldAt).toLocaleString(
+                      "id-ID",
+                    )}{" "}
+                    · {afterSalesAction.sale.totalItems} item ·{" "}
+                    {formatCurrency(afterSalesAction.sale.totalNet)}
                   </p>
                 </section>
 
@@ -1683,7 +1708,10 @@ export default function CashierPage() {
                   </h4>
                   <ul className="space-y-1 rounded-md border border-dashed bg-muted/10 p-3 text-xs">
                     {afterSalesAction.sale.items.map((item) => (
-                      <li key={`${afterSalesAction.sale.id}-${item.productName}`} className="flex justify-between gap-3">
+                      <li
+                        key={`${afterSalesAction.sale.id}-${item.productName}`}
+                        className="flex justify-between gap-3"
+                      >
                         <span>{item.productName}</span>
                         <span className="font-medium">× {item.quantity}</span>
                       </li>
@@ -1694,7 +1722,9 @@ export default function CashierPage() {
                       (sum, item) => sum + item.quantity,
                       0,
                     );
-                    const refundLabel = formatCurrency(afterSalesAction.sale.totalNet);
+                    const refundLabel = formatCurrency(
+                      afterSalesAction.sale.totalNet,
+                    );
                     return (
                       <p className="text-xs text-muted-foreground">
                         {afterSalesAction.type === "void"
@@ -1706,13 +1736,18 @@ export default function CashierPage() {
                 </section>
 
                 <section className="space-y-1">
-                  <Label htmlFor="after-sales-note" className="text-xs font-semibold text-muted-foreground">
+                  <Label
+                    htmlFor="after-sales-note"
+                    className="text-xs font-semibold text-muted-foreground"
+                  >
                     Catatan (wajib untuk void)
                   </Label>
                   <textarea
                     id="after-sales-note"
                     value={afterSalesAction.note}
-                    onChange={(event) => updateAfterSalesNote(event.target.value)}
+                    onChange={(event) =>
+                      updateAfterSalesNote(event.target.value)
+                    }
                     className="h-20 w-full rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     placeholder="Contoh: disetujui supervisor atau alasan pengembalian"
                   />
@@ -1729,7 +1764,9 @@ export default function CashierPage() {
                 </Button>
                 <Button
                   type="button"
-                  variant={afterSalesAction.type === "void" ? "ghost" : "default"}
+                  variant={
+                    afterSalesAction.type === "void" ? "ghost" : "default"
+                  }
                   onClick={() => void handleConfirmAfterSales()}
                   disabled={isProcessingAfterSales}
                 >

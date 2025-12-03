@@ -25,6 +25,7 @@ import {
   stockAdjustmentInputSchema,
   stockAdjustmentOutputSchema,
 } from "@/server/api/schemas/products";
+import { z } from "zod";
 import { db } from "@/server/db";
 import { protectedProcedure, publicProcedure, router } from "@/server/api/trpc";
 
@@ -240,6 +241,55 @@ export const productsRouter = router({
           movement: mapMovement(movement),
         });
       });
+    }),
+  searchProducts: publicProcedure
+    .input(
+      z.object({
+        query: z.string().min(1),
+        limit: z.number().int().min(1).max(50).default(10),
+      }),
+    )
+    .output(
+      z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          sku: z.string(),
+          barcode: z.string().nullable(),
+          price: z.number(),
+          categoryName: z.string().nullable(),
+        }),
+      ),
+    )
+    .query(async ({ input }) => {
+      const products = await db.product.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { name: { contains: input.query, mode: "insensitive" } },
+            { sku: { contains: input.query, mode: "insensitive" } },
+            { barcode: { contains: input.query, mode: "insensitive" } },
+          ],
+        },
+        include: {
+          category: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: [{ name: "asc" }],
+        take: input.limit,
+      });
+
+      return products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        barcode: product.barcode,
+        price: Number(product.price),
+        categoryName: product.category?.name ?? null,
+      }));
     }),
   getByBarcode: publicProcedure
     .input(productByBarcodeInputSchema)
