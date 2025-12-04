@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ArrowRight } from "lucide-react";
@@ -27,14 +27,72 @@ export default function DashboardPage() {
     | "CASHIER";
 
   // Get today's sales summary
-  const { data: todaySummary, isLoading: isSummaryLoading } =
-    api.sales.getDailySummary.useQuery(
-      {
-        date: new Date().toISOString(),
-        outletId: currentOutlet?.id,
-      },
-      { enabled: Boolean(currentOutlet?.id), refetchInterval: 30_000 },
-    );
+  const {
+    data: todaySummary,
+    isLoading: isSummaryLoading,
+    error: summaryError,
+    refetch: refetchSummary,
+  } = api.sales.getDailySummary.useQuery(
+    {
+      date: new Date().toISOString(),
+      outletId: currentOutlet?.id,
+    },
+    {
+      enabled: false, // 🚫 DISABLED - Manual execution only!
+      retry: false,
+      refetchInterval: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+    },
+  );
+
+  // Debug logging with useEffect
+  useEffect(() => {
+    console.log("🔍 Dashboard Query State:", {
+      isLoading: isSummaryLoading,
+      hasError: !!summaryError,
+      hasData: !!todaySummary,
+      currentOutlet: currentOutlet?.id,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (summaryError) {
+      console.error("❌ getDailySummary error:", summaryError);
+      console.error("Error details:", {
+        message: summaryError.message,
+        code: summaryError.data?.code,
+        httpStatus: summaryError.data?.httpStatus,
+      });
+    }
+
+    if (todaySummary) {
+      console.log("✅ getDailySummary success:", {
+        salesCount: todaySummary.sales.length,
+        totalNet: todaySummary.totals.totalNet,
+        totalItems: todaySummary.totals.totalItems,
+        totalGross: todaySummary.totals.totalGross,
+        totalDiscount: todaySummary.totals.totalDiscount,
+      });
+      console.log("📦 Full data:", todaySummary);
+    }
+
+    if (!isSummaryLoading && !summaryError && !todaySummary) {
+      console.warn("⚠️ Query finished but no data and no error!");
+    }
+  }, [todaySummary, summaryError, isSummaryLoading, currentOutlet]);
+
+  // Timeout warning
+  useEffect(() => {
+    if (isSummaryLoading) {
+      const timeout = setTimeout(() => {
+        console.error("⏰ TIMEOUT: Query still loading after 5 seconds!");
+        console.error("This suggests the query is hanging or not completing.");
+      }, 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isSummaryLoading]);
 
   // Get low stock alerts
   const { data: lowStockAlerts } = api.inventory.listLowStock.useQuery(
@@ -44,6 +102,12 @@ export default function DashboardPage() {
 
   // Calculate operational metrics
   const operationalData = useMemo(() => {
+    console.log("💡 Calculating operational data - START:", {
+      hasTodaySummary: !!todaySummary,
+      totalsObject: todaySummary?.totals,
+      salesArray: todaySummary?.sales,
+    });
+
     const sales = todaySummary?.sales ?? [];
     const revenue = sales.reduce((sum, sale) => sum + sale.totalNet, 0);
     const itemsSold = sales.reduce(
@@ -58,7 +122,7 @@ export default function DashboardPage() {
     const hours = Math.floor(shiftDuration / 60);
     const minutes = shiftDuration % 60;
 
-    return {
+    const result = {
       revenue,
       transactions: sales.length,
       itemsSold,
@@ -75,6 +139,10 @@ export default function DashboardPage() {
               : undefined,
       },
     };
+
+    console.log("💡 Operational data - RESULT:", result);
+
+    return result;
   }, [todaySummary, activeShift]);
 
   // Generate sales chart data (hourly)
@@ -168,7 +236,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-6 pb-20 lg:gap-8 lg:pb-10">
         {/* Header */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold text-foreground lg:text-2xl">
                 Dashboard
@@ -192,6 +260,18 @@ export default function DashboardPage() {
               )}
             </p>
           </div>
+          {currentOutlet && (
+            <Button
+              onClick={() => {
+                console.log("🔄 MANUAL REFETCH TRIGGERED");
+                void refetchSummary();
+              }}
+              variant="outline"
+              disabled={isSummaryLoading}
+            >
+              {isSummaryLoading ? "Loading..." : "🔄 Load Data"}
+            </Button>
+          )}
           {currentOutlet && (
             <Button asChild className="hidden lg:flex">
               <Link href="/cashier" className="gap-2">
