@@ -33,7 +33,11 @@ import {
   normalizePaperSize,
 } from "@/server/api/services/sales-validation";
 import { db } from "@/server/db";
-import { protectedProcedure, router, requireActiveShift } from "@/server/api/trpc";
+import {
+  protectedProcedure,
+  router,
+  requireActiveShift,
+} from "@/server/api/trpc";
 import { writeAuditLog } from "@/server/services/audit";
 import { evaluateLowStock } from "@/server/services/lowStock";
 
@@ -50,7 +54,10 @@ const resolveSaleOutlet = async (saleId: string) => {
   });
 
   if (!sale) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Transaksi tidak ditemukan",
+    });
   }
 
   return sale.outletId;
@@ -61,66 +68,271 @@ export const salesRouter = router({
     .input(dailySummaryInputSchema)
     .output(dailySummaryOutputSchema)
     .query(async ({ input, ctx }) => {
-      const baseDate = input.date ? new Date(input.date) : new Date();
-      const rangeStart = startOfDay(baseDate);
-      const rangeEnd = endOfDay(baseDate);
+      console.log("\n\n🚀🚀🚀 ===== getDailySummary CALLED ===== 🚀🚀🚀");
+      console.log("📥 INPUT:", JSON.stringify(input, null, 2));
+      console.log("👤 USER:", ctx.session.user.id, "-", ctx.session.user.name);
+      console.log("=================================================\n");
 
-      const sales = await db.sale.findMany({
-        where: {
+      try {
+        console.log("STEP 1: Parsing date...");
+        // Parse date string as local date to avoid timezone issues
+        // If date is "2025-12-03", we want 2025-12-03 00:00:00 LOCAL, not UTC
+        let baseDate: Date;
+        if (input.date) {
+          // Handle both ISO datetime string and YYYY-MM-DD format
+          const dateStr = input.date.includes("T")
+            ? input.date.split("T")[0] // Extract date part from ISO string
+            : input.date;
+
+          // Parse YYYY-MM-DD as local date
+          const [year, month, day] = dateStr.split("-").map(Number);
+          baseDate = new Date(year, month - 1, day);
+
+          // Validate parsed date
+          if (isNaN(baseDate.getTime())) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Invalid date: ${input.date}`,
+            });
+          }
+        } else {
+          baseDate = new Date();
+        }
+        console.log("STEP 2: Calculating date range...");
+        const rangeStart = startOfDay(baseDate);
+        const rangeEnd = endOfDay(baseDate);
+        console.log(
+          "  Range:",
+          rangeStart.toISOString(),
+          "to",
+          rangeEnd.toISOString(),
+        );
+
+        // Get user's role and accessible outlets
+        console.log("STEP 3: Fetching user from database...");
+        const user = await db.user.findUnique({
+          where: { id: ctx.session.user.id },
+          include: {
+            userOutlets: {
+              where: { isActive: true },
+              include: { outlet: true },
+            },
+          },
+        });
+
+        if (!user) {
+          console.log("  ❌ User not found!");
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "User tidak ditemukan",
+          });
+        }
+        console.log("  ✓ User found:", user.id, "-", user.role);
+
+        // Build where clause based on role
+        console.log("STEP 4: Building where clause...");
+        const whereClause: Prisma.SaleWhereInput = {
           soldAt: {
             gte: rangeStart,
             lte: rangeEnd,
           },
-          outletId: input.outletId ?? undefined,
-          cashierId: ctx.session?.user.id,
-        },
-        include: {
-          items: true,
-          payments: true,
-        },
-        orderBy: {
-          soldAt: "desc",
-        },
-      });
+        };
 
-      const totals = sales.reduce(
-        (acc, sale) => {
-          const totalItems = sale.items.reduce((sum, item) => sum + item.quantity, 0);
-          const cashPaid = sale.payments
-            .filter((payment) => payment.method === PaymentMethod.CASH)
-            .reduce((sum, payment) => sum + Number(payment.amount), 0);
+        // If outletId is specified, filter by that outlet
+        if (input.outletId) {
+          // Check if user has access to this outlet
+          const hasAccess = user.userOutlets.some(
+            (uo) => uo.outletId === input.outletId,
+          );
+          if (!hasAccess && user.role === "CASHIER") {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Anda tidak memiliki akses ke outlet ini",
+            });
+          }
+          whereClause.outletId = input.outletId;
+        } else {
+          // No specific outlet - filter by accessible outlets
+          const accessibleOutletIds = user.userOutlets.map((uo) => uo.outletId);
 
-          acc.totalGross += Number(sale.totalGross);
-          acc.totalDiscount += Number(sale.discountTotal);
-          acc.totalNet += Number(sale.totalNet);
-          acc.totalItems += totalItems;
-          acc.totalCash += cashPaid;
-          acc.totalTax += sale.taxAmount ? Number(sale.taxAmount) : 0;
+          if (accessibleOutletIds.length > 0) {
+            whereClause.outletId = { in: accessibleOutletIds };
+          } else {
+          }
+        }
 
-          return acc;
-        },
-        {
-          totalGross: 0,
-          totalDiscount: 0,
-          totalNet: 0,
-          totalItems: 0,
-          totalCash: 0,
-          totalTax: 0,
-        },
-      );
+        // CASHIER: Only see their own transactions
+        // OWNER/ADMIN: See all transactions in accessible outlets
+        if (user.role === "CASHIER") {
+          whereClause.cashierId = ctx.session.user.id;
+        } else {
+        }
+        console.log("  ✓ Where clause:", JSON.stringify(whereClause, null, 2));
 
-      return dailySummaryOutputSchema.parse({
-        date: rangeStart.toISOString(),
-        totals,
-        sales: sales.map((sale) => ({
-          id: sale.id,
-          outletId: sale.outletId,
-          receiptNumber: sale.receiptNumber,
-          totalNet: Number(sale.totalNet),
-          soldAt: sale.soldAt.toISOString(),
-          paymentMethods: sale.payments.map((payment) => payment.method),
-        })),
-      });
+        console.log("STEP 5: Querying sales from database...");
+        const sales = await db.sale.findMany({
+          where: whereClause,
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+            payments: true,
+          },
+          orderBy: {
+            soldAt: "desc",
+          },
+        });
+        console.log("  ✓ Found", sales.length, "sales");
+
+        console.log("STEP 6: Calculating totals...");
+        const totals = sales.reduce(
+          (acc, sale) => {
+            const totalItems = sale.items.reduce(
+              (sum, item) => sum + item.quantity,
+              0,
+            );
+            const cashPaid = sale.payments
+              .filter((payment) => payment.method === PaymentMethod.CASH)
+              .reduce((sum, payment) => sum + Number(payment.amount), 0);
+
+            acc.totalGross += Number(sale.totalGross);
+            acc.totalDiscount += Number(sale.discountTotal);
+            acc.totalNet += Number(sale.totalNet);
+            acc.totalItems += totalItems;
+            acc.totalCash += cashPaid;
+            acc.totalTax += sale.taxAmount ? Number(sale.taxAmount) : 0;
+
+            return acc;
+          },
+          {
+            totalGross: 0,
+            totalDiscount: 0,
+            totalNet: 0,
+            totalItems: 0,
+            totalCash: 0,
+            totalTax: 0,
+          },
+        );
+        console.log("  ✓ Totals calculated:", totals);
+
+        console.log("STEP 7: Building response object...");
+        const response = {
+          date: rangeStart.toISOString(),
+          totals,
+          sales: sales.map((sale) => ({
+            id: sale.id,
+            outletId: sale.outletId,
+            receiptNumber: sale.receiptNumber,
+            totalNet: Number(sale.totalNet),
+            soldAt: sale.soldAt.toISOString(),
+            paymentMethods: sale.payments.map((payment) => payment.method),
+            items: sale.items.map((item) => ({
+              productName: item.product?.name || "Unknown",
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+            })),
+          })),
+        };
+
+        console.log("STEP 8: Validating response against schema...");
+        // Validate response against schema
+        try {
+          const validatedResponse = dailySummaryOutputSchema.parse(response);
+
+          // Log response summary
+          console.log("\n🎉🎉🎉 ===== getDailySummary SUCCESS ===== 🎉🎉🎉");
+          console.log("📊 RESPONSE:", {
+            date: validatedResponse.date,
+            salesCount: validatedResponse.sales.length,
+            totalNet: validatedResponse.totals.totalNet,
+            totalItems: validatedResponse.totals.totalItems,
+            totalGross: validatedResponse.totals.totalGross,
+            totalDiscount: validatedResponse.totals.totalDiscount,
+          });
+          console.log(
+            "🔥 FIRST SALE:",
+            validatedResponse.sales[0]
+              ? {
+                  receipt: validatedResponse.sales[0].receiptNumber,
+                  total: validatedResponse.sales[0].totalNet,
+                  items: validatedResponse.sales[0].items.length,
+                }
+              : "NO SALES",
+          );
+          console.log("=================================================\n\n");
+
+          return validatedResponse;
+        } catch (validationError) {
+          console.error("\n\n🔥🔥🔥 VALIDATION ERROR 🔥🔥🔥");
+          console.error("Error:", validationError);
+          console.error(
+            "Message:",
+            validationError instanceof Error
+              ? validationError.message
+              : String(validationError),
+          );
+          if (
+            validationError &&
+            typeof validationError === "object" &&
+            "issues" in validationError
+          ) {
+            console.error(
+              "Zod Issues:",
+              JSON.stringify(validationError.issues, null, 2),
+            );
+          }
+          console.error(
+            "Response that failed:",
+            JSON.stringify(response, null, 2),
+          );
+          console.error(
+            "=================================================\n\n",
+          );
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Response validation failed",
+            cause: validationError,
+          });
+        }
+      } catch (error) {
+        // Catch any unexpected errors
+        console.error("\n\n💥💥💥 ===== getDailySummary ERROR ===== 💥💥💥");
+        console.error(
+          "Type:",
+          error instanceof Error ? error.constructor.name : typeof error,
+        );
+        console.error(
+          "❌ ERROR MESSAGE:",
+          error instanceof Error ? error.message : String(error),
+        );
+        console.error("📥 INPUT WAS:", {
+          date: input.date,
+          outletId: input.outletId,
+        });
+        if (error instanceof Error) {
+          console.error("📚 STACK TRACE:");
+          console.error(error.stack);
+        } else {
+          console.error("📚 RAW ERROR:", error);
+        }
+        console.error("=================================================\n\n");
+
+        // Re-throw as TRPCError if not already one
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
+          cause: error,
+        });
+      }
     }),
   listRecent: protectedProcedure
     .input(listRecentInputSchema)
@@ -277,46 +489,50 @@ export const salesRouter = router({
               cashierId: ctx.session?.user.id,
               sessionId: ctx.activeShift.id,
               soldAt: input.soldAt ? new Date(input.soldAt) : new Date(),
-            totalGross: toDecimal(financials.totalGross),
-            discountTotal: toDecimal(financials.totalDiscount),
-            totalNet: toDecimal(financials.totalNet),
-            taxRate:
-              input.applyTax && input.taxRate
-                ? toDecimal(input.taxRate)
+              totalGross: toDecimal(financials.totalGross),
+              discountTotal: toDecimal(financials.totalDiscount),
+              totalNet: toDecimal(financials.totalNet),
+              taxRate:
+                input.applyTax && input.taxRate
+                  ? toDecimal(input.taxRate)
+                  : undefined,
+              taxAmount: financials.taxAmount
+                ? toDecimal(financials.taxAmount)
                 : undefined,
-            taxAmount: financials.taxAmount
-              ? toDecimal(financials.taxAmount)
-              : undefined,
-            items: {
-              create: input.items.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                unitPrice: toDecimal(item.unitPrice),
-                discount: toDecimal(item.discount),
-                total: toDecimal(item.unitPrice * item.quantity - item.discount),
-                taxAmount:
-                  input.applyTax && (item.taxable ?? true) && financials.taxableBase > 0
-                    ? toDecimal(
-                        ((item.unitPrice * item.quantity - item.discount) /
-                          financials.taxableBase) *
-                          financials.taxAmount,
-                      )
-                    : undefined,
-              })),
+              items: {
+                create: input.items.map((item) => ({
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  unitPrice: toDecimal(item.unitPrice),
+                  discount: toDecimal(item.discount),
+                  total: toDecimal(
+                    item.unitPrice * item.quantity - item.discount,
+                  ),
+                  taxAmount:
+                    input.applyTax &&
+                    (item.taxable ?? true) &&
+                    financials.taxableBase > 0
+                      ? toDecimal(
+                          ((item.unitPrice * item.quantity - item.discount) /
+                            financials.taxableBase) *
+                            financials.taxAmount,
+                        )
+                      : undefined,
+                })),
+              },
+              payments: {
+                create: input.payments.map((payment) => ({
+                  method: payment.method,
+                  amount: toDecimal(payment.amount),
+                  reference: payment.reference,
+                })),
+              },
             },
-            payments: {
-              create: input.payments.map((payment) => ({
-                method: payment.method,
-                amount: toDecimal(payment.amount),
-                reference: payment.reference,
-              })),
+            include: {
+              items: true,
+              payments: true,
             },
-          },
-          include: {
-            items: true,
-            payments: true,
-          },
-        });
+          });
 
           await Promise.all(
             input.items.map(async (item) => {
@@ -447,7 +663,10 @@ export const salesRouter = router({
       });
 
       if (!sale) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Transaksi tidak ditemukan",
+        });
       }
 
       const paperSize = normalizePaperSize(input.paperSize);
@@ -484,11 +703,17 @@ export const salesRouter = router({
         });
 
         if (!sale) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Transaksi tidak ditemukan",
+          });
         }
 
         if (sale.status !== SaleStatus.COMPLETED) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Transaksi sudah diproses sebelumnya" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Transaksi sudah diproses sebelumnya",
+          });
         }
 
         let restockedQuantity = 0;
@@ -533,7 +758,10 @@ export const salesRouter = router({
           affectedKeys.add(`${item.productId}:${sale.outletId}`);
         }
 
-        const totalItems = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+        const totalItems = sale.items.reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        );
 
         await tx.sale.update({
           where: { id: sale.id },
@@ -617,15 +845,24 @@ export const salesRouter = router({
         });
 
         if (!sale) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Transaksi tidak ditemukan" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Transaksi tidak ditemukan",
+          });
         }
 
         if (sale.status !== SaleStatus.COMPLETED) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Transaksi tidak dapat direfund" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Transaksi tidak dapat direfund",
+          });
         }
 
         if (sale.refunds.length > 0) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Refund sudah diproses" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Refund sudah diproses",
+          });
         }
 
         const refundAmount = input.amount ?? Number(sale.totalNet);
@@ -671,7 +908,10 @@ export const salesRouter = router({
           affectedKeys.add(`${item.productId}:${sale.outletId}`);
         }
 
-        const totalItems = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+        const totalItems = sale.items.reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        );
 
         await tx.sale.update({
           where: { id: sale.id },
@@ -817,14 +1057,22 @@ export const salesRouter = router({
         },
       });
 
-      const currentBuckets = new Map<string, { totalNet: number; count: number }>();
-      const previousBuckets = new Map<string, { totalNet: number; count: number }>();
+      const currentBuckets = new Map<
+        string,
+        { totalNet: number; count: number }
+      >();
+      const previousBuckets = new Map<
+        string,
+        { totalNet: number; count: number }
+      >();
 
       for (const sale of sales) {
-        const soldAt = sale.soldAt instanceof Date ? sale.soldAt : new Date(sale.soldAt);
+        const soldAt =
+          sale.soldAt instanceof Date ? sale.soldAt : new Date(sale.soldAt);
         const bucketDate = startOfDay(soldAt);
         const bucketKey = bucketDate.toISOString();
-        const target = bucketDate >= currentPeriodStart ? currentBuckets : previousBuckets;
+        const target =
+          bucketDate >= currentPeriodStart ? currentBuckets : previousBuckets;
         const existing = target.get(bucketKey) ?? { totalNet: 0, count: 0 };
         existing.totalNet += Number(sale.totalNet);
         existing.count += 1;
@@ -869,7 +1117,9 @@ export const salesRouter = router({
           ? summary.currentTotalNet > 0
             ? 100
             : 0
-          : ((summary.currentTotalNet - summary.previousTotalNet) / summary.previousTotalNet) * 100;
+          : ((summary.currentTotalNet - summary.previousTotalNet) /
+              summary.previousTotalNet) *
+            100;
 
       return weeklyTrendOutputSchema.parse({
         series,
