@@ -9,7 +9,7 @@ type Outlet = {
   id: string;
   name: string;
   code: string;
-  address?: string | null;
+  address?: string;
 };
 
 type OutletSelectorProps = {

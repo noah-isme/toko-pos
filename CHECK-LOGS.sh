@@ -1,0 +1,13 @@
+#!/bin/bash
+echo "🔍 Checking if debug logs are in place..."
+echo ""
+echo "=== SERVER LOGS (sales.ts) ==="
+grep -n "🚀🚀🚀" src/server/api/routers/sales.ts || echo "❌ Missing server logs!"
+echo ""
+echo "=== CLIENT LOGS (dashboard/page.tsx) ==="
+grep -n "🔍 Dashboard Query State" src/app/dashboard/page.tsx || echo "❌ Missing client logs!"
+echo ""
+echo "=== RETRY DISABLED? ==="
+grep -n "retry: false" src/app/dashboard/page.tsx || echo "❌ Retry still enabled!"
+echo ""
+echo "✅ All checks complete!"
