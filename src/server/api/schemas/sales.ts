@@ -78,6 +78,7 @@ export const saleSummarySchema = z.object({
     z.object({
       productName: z.string(),
       quantity: z.number(),
+      unitPrice: z.number(),
     }),
   ),
 });
