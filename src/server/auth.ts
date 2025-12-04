@@ -160,22 +160,22 @@ export const authOptions: NextAuthOptions = {
 };
 
 // Helpful debug: log presence of critical env vars (don't print secrets)
-console.log("NEXTAUTH_SECRET set?", !!env.NEXTAUTH_SECRET);
-console.log(
-  "EMAIL server configured?",
-  !!(
-    env.EMAIL_SERVER_HOST &&
-    env.EMAIL_SERVER_USER &&
-    env.EMAIL_SERVER_PASSWORD
-  ),
-);
+// console.log("NEXTAUTH_SECRET set?", !!env.NEXTAUTH_SECRET);
+// console.log(
+//   "EMAIL server configured?",
+//   !!(
+//     env.EMAIL_SERVER_HOST &&
+//     env.EMAIL_SERVER_USER &&
+//     env.EMAIL_SERVER_PASSWORD
+//   ),
+// );
 
 // Next.js app-route handlers expect functions that accept a Request and
 // return void | Response | Promise<void | Response>. Use that as the
 // handler type so the generated .next types line up.
 let handler: (req: Request) => void | Response | Promise<void | Response>;
 try {
-  console.log("[server/auth] Initializing NextAuth with adapters/providers...");
+  // console.log("[server/auth] Initializing NextAuth with adapters/providers...");
   // NextAuth returns a handler function; keep its signature generic to avoid
   // tightly coupling to NextAuth internal types here.
   // NextAuth returns a handler function. Cast it to the narrower Request
@@ -184,7 +184,7 @@ try {
   handler = NextAuth(authOptions) as unknown as (
     req: Request,
   ) => void | Response | Promise<void | Response>;
-  console.log("[server/auth] NextAuth initialized successfully");
+  // console.log("[server/auth] NextAuth initialized successfully");
 } catch (err) {
   // If NextAuth throws during initialization, surface the error to dev logs
   console.error(
