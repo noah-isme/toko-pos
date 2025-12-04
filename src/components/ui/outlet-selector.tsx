@@ -5,8 +5,36 @@ import { Building2, ChevronDown } from "lucide-react";
 import { useOutlet } from "@/lib/outlet-context";
 import { Badge } from "@/components/ui/badge";
 
-export function OutletSelector() {
-  const { currentOutlet, userOutlets, setCurrentOutlet, isLoading } = useOutlet();
+type Outlet = {
+  id: string;
+  name: string;
+  code: string;
+  address?: string | null;
+};
+
+type OutletSelectorProps = {
+  outlets?: Outlet[];
+  currentOutlet?: Outlet | null;
+  onOutletChange?: (outlet: Outlet) => void;
+  variant?: "default" | "minimal";
+};
+
+export function OutletSelector({
+  outlets: propOutlets,
+  currentOutlet: propCurrentOutlet,
+  onOutletChange: propOnOutletChange,
+  variant = "default",
+}: OutletSelectorProps = {}) {
+  const context = useOutlet();
+
+  // Use props if provided, otherwise use context
+  const outlets = propOutlets ?? context.userOutlets.map((uo) => uo.outlet);
+  const currentOutlet = propCurrentOutlet ?? context.currentOutlet;
+  const setCurrentOutlet = propOnOutletChange ?? context.setCurrentOutlet;
+  const isLoading = context.isLoading;
+
+  // For context-based outlets, we need the full userOutlets for role
+  const userOutlets = propOutlets ? [] : context.userOutlets;
 
   if (isLoading) {
     return (
@@ -17,8 +45,41 @@ export function OutletSelector() {
     );
   }
 
-  if (!currentOutlet || userOutlets.length === 0) {
+  if (!currentOutlet || outlets.length === 0) {
     return null;
+  }
+
+  if (variant === "minimal") {
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Outlet:</span>
+        <div className="relative">
+          <select
+            aria-label="Pilih outlet aktif"
+            value={currentOutlet.id}
+            onChange={(event) => {
+              const selectedOutlet = outlets.find(
+                (o) => o.id === event.target.value,
+              );
+              if (selectedOutlet) {
+                setCurrentOutlet(selectedOutlet);
+              }
+            }}
+            className="appearance-none rounded-md border bg-background px-3 py-1.5 pr-8 text-sm font-medium focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {outlets.map((outlet) => (
+              <option key={outlet.id} value={outlet.id}>
+                {outlet.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -30,8 +91,12 @@ export function OutletSelector() {
         </span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{currentOutlet.code}</span>
-          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
-            {userOutlets.find((uo) => uo.outletId === currentOutlet.id)?.role || "CASHIER"}
+          <Badge
+            variant="secondary"
+            className="text-[10px] uppercase tracking-wide"
+          >
+            {userOutlets.find((uo) => uo.outletId === currentOutlet.id)?.role ||
+              "CASHIER"}
           </Badge>
         </div>
       </div>
@@ -40,20 +105,25 @@ export function OutletSelector() {
           aria-label="Pilih outlet aktif"
           value={currentOutlet.id}
           onChange={(event) => {
-            const selectedOutlet = userOutlets.find((uo) => uo.outletId === event.target.value)?.outlet;
+            const selectedOutlet = outlets.find(
+              (o) => o.id === event.target.value,
+            );
             if (selectedOutlet) {
               setCurrentOutlet(selectedOutlet);
             }
           }}
           className="appearance-none rounded-md border border-transparent bg-transparent px-3 py-2 pr-8 text-sm font-medium text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          {userOutlets.map((userOutlet) => (
-            <option key={userOutlet.id} value={userOutlet.outletId}>
-              {userOutlet.outlet.name} ({userOutlet.outlet.code})
+          {outlets.map((outlet) => (
+            <option key={outlet.id} value={outlet.id}>
+              {outlet.name} ({outlet.code})
             </option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-2 h-4 w-4 text-muted-foreground" aria-hidden />
+        <ChevronDown
+          className="pointer-events-none absolute right-2 h-4 w-4 text-muted-foreground"
+          aria-hidden
+        />
       </div>
     </label>
   );
