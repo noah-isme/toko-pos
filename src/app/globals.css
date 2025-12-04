@@ -298,3 +298,210 @@ body {
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12); /* soft blue ring */
     border-radius: 0.5rem;
 }
+
+/* POS Cashier-specific animations */
+@keyframes pulse-subtle {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.85;
+    }
+}
+
+@keyframes slide-out-left {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-100%);
+    }
+}
+
+@keyframes slide-in-right {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes bounce-subtle {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-2px);
+    }
+}
+
+.animate-pulse-subtle {
+    animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-slide-out-left {
+    animation: slide-out-left 120ms ease-out forwards;
+}
+
+.animate-slide-in-right {
+    animation: slide-in-right 200ms ease-out;
+}
+
+.animate-bounce-subtle {
+    animation: bounce-subtle 1s ease-in-out infinite;
+}
+
+/* Disable animations for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .animate-pulse-subtle,
+    .animate-slide-out-left,
+    .animate-slide-in-right,
+    .animate-bounce-subtle {
+        animation: none !important;
+    }
+}
+
+/* Payment Modal Animations */
+
+/* Fade in animation */
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Slide up animation */
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Shake animation for error */
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-4px);
+    }
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+/* Bounce in animation for success */
+@keyframes bounce-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* QR Code scanning animation */
+@keyframes scan {
+    0% {
+        transform: translateY(-150px);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(150px);
+        opacity: 0;
+    }
+}
+
+/* Scale pulse for success state */
+@keyframes scale-pulse {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* Apply animations */
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-up {
+    animation: slide-up 0.4s ease-out;
+}
+
+.animate-shake {
+    animation: shake 0.4s ease-in-out;
+}
+
+.animate-bounce-in {
+    animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.animate-scan {
+    animation: scan 2s ease-in-out infinite;
+}
+
+.animate-scale-pulse {
+    animation: scale-pulse 2s ease-in-out infinite;
+}
+
+/* Reduced motion support for payment animations */
+@media (prefers-reduced-motion: reduce) {
+    .animate-fade-in,
+    .animate-slide-up,
+    .animate-shake,
+    .animate-bounce-in,
+    .animate-scan,
+    .animate-scale-pulse {
+        animation: none !important;
+    }
+}
+
+/* Mobile optimizations for payment animations */
+@media (max-width: 640px) {
+    .animate-slide-up {
+        animation-duration: 0.3s;
+    }
+
+    .animate-bounce-in {
+        animation-duration: 0.4s;
+    }
+}
