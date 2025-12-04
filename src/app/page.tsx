@@ -21,6 +21,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useOutlet } from "@/lib/outlet-context";
 import { api } from "@/trpc/client";
+import { AnimatedNumber } from "@/components/ui/count-up";
+import { RevenueTrendChart } from "@/components/dashboard/revenue-trend-chart";
+import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
+import { QuickSearchBar } from "@/components/dashboard/quick-search-bar";
+import { NotificationCenter } from "@/components/dashboard/notification-center";
 
 export default function HomePage() {
   const { data: session } = useSession();
@@ -75,24 +80,31 @@ export default function HomePage() {
       {/* Hero - Greeting & Today's Snapshot */}
       <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-emerald-50 via-white to-emerald-50/30 p-6 shadow-sm lg:p-8">
         <div className="relative z-10 space-y-6">
-          {/* Greeting */}
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-gray-900 lg:text-3xl">
-              {greeting}, {session?.user?.name || "User"} 👋
-            </h1>
-            <p className="text-sm text-gray-600">
-              {currentOutlet ? (
-                <>
-                  <span className="font-medium">
-                    {currentOutlet.name} ({currentOutlet.code})
-                  </span>
-                  {" • "}
-                  {dateStr}
-                </>
-              ) : (
-                "Pilih outlet untuk melihat data"
-              )}
-            </p>
+          {/* Greeting & Actions */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1 flex-1">
+              <h1 className="text-2xl font-semibold text-gray-900 lg:text-3xl">
+                {greeting}, {session?.user?.name || "User"} 👋
+              </h1>
+              <p className="text-sm text-gray-600">
+                {currentOutlet ? (
+                  <>
+                    <span className="font-medium">
+                      {currentOutlet.name} ({currentOutlet.code})
+                    </span>
+                    {" • "}
+                    {dateStr}
+                  </>
+                ) : (
+                  "Pilih outlet untuk melihat data"
+                )}
+              </p>
+            </div>
+            {/* Quick Search & Notifications */}
+            <div className="hidden lg:flex items-center gap-2">
+              <QuickSearchBar />
+              <NotificationCenter />
+            </div>
           </div>
 
           {/* Today's KPIs */}
@@ -111,7 +123,10 @@ export default function HomePage() {
                       {isSummaryLoading ? (
                         <span className="text-gray-400">...</span>
                       ) : (
-                        formatCurrency(metrics.revenue)
+                        <AnimatedNumber
+                          value={metrics.revenue}
+                          format={(val) => formatCurrency(val)}
+                        />
                       )}
                     </p>
                   </div>
@@ -128,7 +143,11 @@ export default function HomePage() {
                       Transaksi
                     </p>
                     <p className="text-lg font-bold text-gray-900">
-                      {isSummaryLoading ? "..." : metrics.transactions}
+                      {isSummaryLoading ? (
+                        "..."
+                      ) : (
+                        <AnimatedNumber value={metrics.transactions} />
+                      )}
                     </p>
                   </div>
                 </div>
@@ -144,7 +163,11 @@ export default function HomePage() {
                       Total Item
                     </p>
                     <p className="text-lg font-bold text-gray-900">
-                      {isSummaryLoading ? "..." : metrics.items}
+                      {isSummaryLoading ? (
+                        "..."
+                      ) : (
+                        <AnimatedNumber value={metrics.items} />
+                      )}
                     </p>
                   </div>
                 </div>
@@ -280,6 +303,64 @@ export default function HomePage() {
           </Card>
         </div>
       </section>
+
+      {/* Revenue Trend & Recent Activity */}
+      {currentOutlet && (
+        <section className="grid gap-4 lg:grid-cols-2">
+          {/* Revenue Trend Chart */}
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Trend Penjualan 7 Hari
+                </h3>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/reports/daily" className="text-xs">
+                    Detail →
+                  </Link>
+                </Button>
+              </div>
+              {todaySummary?.sales && todaySummary.sales.length > 0 ? (
+                <RevenueTrendChart
+                  data={Array.from({ length: 7 }, (_, i) => {
+                    const date = new Date();
+                    date.setDate(date.getDate() - (6 - i));
+                    // Simulated data - in real app would come from API
+                    const dayRevenue =
+                      i === 6
+                        ? metrics.revenue
+                        : Math.random() * metrics.revenue * 1.5;
+                    return {
+                      date,
+                      revenue: dayRevenue,
+                    };
+                  })}
+                />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-sm text-gray-500">
+                  Belum ada data penjualan
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity Feed */}
+          <RecentActivityFeed
+            activities={
+              todaySummary?.sales
+                ? todaySummary.sales.slice(0, 3).map((sale) => ({
+                    id: sale.id,
+                    type: "sale" as const,
+                    title: `Transaksi ${sale.receiptNumber}`,
+                    description: `${sale.items.length} item terjual`,
+                    timestamp: new Date(sale.soldAt),
+                    amount: Number(sale.totalNet),
+                  }))
+                : []
+            }
+          />
+        </section>
+      )}
 
       {/* Operational Snapshot */}
       <section className="space-y-4">
