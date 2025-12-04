@@ -4,7 +4,6 @@ import { useState } from "react";
 import { signIn, type SignInResponse } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
-  Store,
   Mail,
   Lock,
   ArrowRight,
@@ -12,6 +11,7 @@ import {
   AlertCircle,
   Sparkles,
 } from "lucide-react";
+import Image from "next/image";
 
 import { MotionButton as Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,7 +101,13 @@ export default function LoginPage() {
           <div className="space-y-8">
             {/* Logo */}
             <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-2xl px-6 py-4 border border-white/20">
-              <Store className="h-8 w-8" />
+              <Image
+                src="/brand/toko-pos-icon-inverted.svg"
+                alt="Toko POS"
+                width={40}
+                height={40}
+                className="flex-shrink-0"
+              />
               <span className="text-3xl font-bold">Toko POS</span>
             </div>
 
@@ -140,9 +146,14 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center">
-            <div className="inline-flex items-center gap-3 text-emerald-600 mb-4">
-              <Store className="h-8 w-8" />
-              <span className="text-2xl font-bold">Toko POS</span>
+            <div className="inline-flex items-center justify-center mb-4">
+              <Image
+                src="/brand/toko-pos-logo.svg"
+                alt="Toko POS"
+                width={180}
+                height={45}
+                priority
+              />
             </div>
             <p className="text-sm text-muted-foreground">
               Sistem POS modern untuk toko multi-outlet

@@ -22,6 +22,7 @@ import { OutletSelector } from "@/components/ui/outlet-selector";
 import { useOutlet } from "@/lib/outlet-context";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Brand } from "@/components/ui/brand";
 
 const navItems = [
   { href: "/cashier", label: "Kasir" },
@@ -174,8 +175,8 @@ export function SiteHeader({ className }: { className?: string }) {
               </DialogContent>
             </Dialog>
           )}
-          <Link href="/" className="text-base font-semibold tracking-tight">
-            Toko POS
+          <Link href="/" className="flex items-center">
+            <Brand variant="logo" size="sm" />
           </Link>
           {isAuthenticated ? (
             <nav className="hidden gap-0.5 lg:flex" aria-label="Navigasi utama">
