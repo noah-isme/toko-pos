@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, useSpring, useTransform } from "framer-motion";
+import { motion } from "framer-motion";
 
 type CountUpProps = {
   value: number;
@@ -20,26 +20,48 @@ export function CountUp({
   suffix = "",
   decimals = 0,
 }: CountUpProps) {
+  const [displayValue, setDisplayValue] = useState(0);
   const [mounted, setMounted] = useState(false);
-  const spring = useSpring(0, {
-    duration: duration * 1000,
-    bounce: 0,
-  });
-  const display = useTransform(spring, (current) =>
-    current.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, "."),
-  );
 
   useEffect(() => {
     setMounted(true);
-    if (mounted) {
-      spring.set(value);
-    }
-  }, [value, mounted, spring]);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const startValue = displayValue;
+    const endValue = value;
+    const animationDuration = duration * 1000;
+    const startTime = Date.now();
+
+    const updateValue = () => {
+      const now = Date.now();
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / animationDuration, 1);
+
+      // Easing function (ease out)
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      const currentValue = startValue + (endValue - startValue) * easedProgress;
+
+      setDisplayValue(currentValue);
+
+      if (progress < 1) {
+        requestAnimationFrame(updateValue);
+      }
+    };
+
+    requestAnimationFrame(updateValue);
+  }, [value, mounted, duration, displayValue]);
+
+  const formattedValue = displayValue
+    .toFixed(decimals)
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
   return (
     <span className={className}>
       {prefix}
-      <motion.span>{display}</motion.span>
+      <span>{formattedValue}</span>
       {suffix}
     </span>
   );

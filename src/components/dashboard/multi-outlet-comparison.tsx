@@ -102,7 +102,7 @@ export function MultiOutletComparison() {
               Compare performance across all outlets
             </p>
           </div>
-          <Select value={timeframe} onValueChange={(v: any) => setTimeframe(v)}>
+          <Select value={timeframe} onValueChange={(v: "today" | "week" | "month") => setTimeframe(v)}>
             <SelectTrigger className="w-32">
               <SelectValue />
             </SelectTrigger>

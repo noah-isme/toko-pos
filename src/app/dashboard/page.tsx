@@ -26,6 +26,15 @@ export default function DashboardPage() {
     | "ADMIN"
     | "CASHIER";
 
+  // Get stable date string for today (yyyy-MM-dd format, not ISO)
+  const todayDate = useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
   // Get today's sales summary
   const {
     data: todaySummary,
@@ -34,17 +43,17 @@ export default function DashboardPage() {
     refetch: refetchSummary,
   } = api.sales.getDailySummary.useQuery(
     {
-      date: new Date().toISOString(),
+      date: todayDate,
       outletId: currentOutlet?.id,
     },
     {
-      enabled: false, // 🚫 DISABLED - Manual execution only!
-      retry: false,
+      enabled: Boolean(currentOutlet?.id),
+      retry: 1,
       refetchInterval: false,
-      refetchOnMount: false,
+      refetchOnMount: true,
       refetchOnReconnect: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 5 * 60 * 1000,
     },
   );
 
@@ -97,7 +106,12 @@ export default function DashboardPage() {
   // Get low stock alerts
   const { data: lowStockAlerts } = api.inventory.listLowStock.useQuery(
     { outletId: currentOutlet?.id ?? "", limit: 10 },
-    { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
+    { 
+      enabled: Boolean(currentOutlet?.id), 
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
   );
 
   // Calculate operational metrics

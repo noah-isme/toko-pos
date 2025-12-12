@@ -62,7 +62,9 @@ export function OutletProvider({ children }: { children: ReactNode }) {
     { outletId: currentOutlet?.id ?? "" },
     {
       enabled: Boolean(currentOutlet?.id),
-      refetchInterval: 60_000,
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
     },
   );
   const { refetch: refetchActiveShift } = activeShiftQuery;

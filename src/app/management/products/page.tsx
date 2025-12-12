@@ -60,13 +60,23 @@ export default function ProductManagementPage() {
 
   const lowStockQuery = api.inventory.listLowStock.useQuery(
     { outletId: currentOutlet?.id ?? "", limit: 100 },
-    { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
+    { 
+      enabled: Boolean(currentOutlet?.id), 
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
   );
 
   // Get all inventory data for current outlet
   const inventoryQuery = api.inventory.getAllInventory.useQuery(
     { outletId: currentOutlet?.id ?? "" },
-    { enabled: Boolean(currentOutlet?.id), refetchInterval: 60_000 },
+    { 
+      enabled: Boolean(currentOutlet?.id), 
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
   );
 
   // Debug logging

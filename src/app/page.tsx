@@ -18,29 +18,38 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { useOutlet } from "@/lib/outlet-context";
 import { api } from "@/trpc/client";
 import { AnimatedNumber } from "@/components/ui/count-up";
 import { RevenueTrendChart } from "@/components/dashboard/revenue-trend-chart";
 import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
-import { QuickSearchBar } from "@/components/dashboard/quick-search-bar";
-import { NotificationCenter } from "@/components/dashboard/notification-center";
 
 export default function HomePage() {
   const { data: session } = useSession();
   const { currentOutlet, activeShift } = useOutlet();
 
+  // Get stable date string for today (yyyy-MM-dd format, not ISO)
+  const todayDate = useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
   // Get today's sales summary
   const { data: todaySummary, isLoading: isSummaryLoading } =
     api.sales.getDailySummary.useQuery(
       {
-        date: new Date().toISOString(),
+        date: todayDate,
         outletId: currentOutlet?.id,
       },
       {
         enabled: Boolean(currentOutlet?.id),
-        refetchInterval: 60000, // Refresh every minute
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        staleTime: 5 * 60 * 1000,
       },
     );
 
@@ -99,11 +108,6 @@ export default function HomePage() {
                   "Pilih outlet untuk melihat data"
                 )}
               </p>
-            </div>
-            {/* Quick Search & Notifications */}
-            <div className="hidden lg:flex items-center gap-2">
-              <QuickSearchBar />
-              <NotificationCenter />
             </div>
           </div>
 
