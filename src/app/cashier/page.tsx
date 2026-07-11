@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 // Define payment methods supported by this cashier interface
 type PaymentMethod = "CASH" | "QRIS" | "DEBIT" | "CREDIT" | "TRANSFER";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { useOutlet } from "@/lib/outlet-context";
 import { cacheProducts } from "@/lib/catalog-cache";
 import { api } from "@/trpc/client";
@@ -69,6 +70,58 @@ type ReceiptPreviewState = {
   paymentReference?: string;
 };
 
+type PromotionTypeLabel = "BUY_X_GET_Y" | "BUNDLE_DISCOUNT" | "TIERED_DISCOUNT";
+
+type PromotionDisplay = {
+  id: string;
+  name: string;
+  type: PromotionTypeLabel;
+  description: string | null;
+  rules: unknown;
+  isActive: boolean;
+  isGlobal: boolean;
+  priority: number;
+  startDate: string | null;
+  endDate: string | null;
+};
+
+type CashierTaskItem = {
+  id: string;
+  title: string;
+  description: string;
+  status: "pending" | "complete";
+  notes?: string | null;
+};
+
+type TaskAlert = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  minStock?: number;
+};
+
+const PROMOTION_LABELS: Record<PromotionTypeLabel, string> = {
+  BUY_X_GET_Y: "Beli X Gratis Y",
+  BUNDLE_DISCOUNT: "Diskon Bundel",
+  TIERED_DISCOUNT: "Diskon Bertingkat",
+};
+
+const describePromotionRules = (rules: unknown) => {
+  if (!rules) return "Aturan promo tidak tersedia";
+  try {
+    const json = JSON.stringify(rules);
+    if (json.length <= 60) return json;
+    return `${json.slice(0, 60)}...`;
+  } catch {
+    return "Aturan spesial";
+  }
+};
+
+const taskStatusClass = (status: CashierTaskItem["status"]) =>
+  status === "pending"
+    ? "text-amber-600 bg-amber-200/70 dark:text-amber-400"
+    : "text-emerald-600 bg-emerald-200/70 dark:text-emerald-300";
+
 export default function CashierPageRedesign() {
   const {
     currentOutlet,
@@ -118,6 +171,26 @@ export default function CashierPageRedesign() {
   );
   const recordSale = api.sales.recordSale.useMutation();
   const recentSales = api.sales.listRecent.useQuery({ limit: 1 });
+  const promotionsQuery = api.promotions.list.useQuery(
+    { outletId: activeOutletId ?? "" },
+    {
+      enabled: !!activeOutletId,
+      staleTime: 300_000,
+    },
+  );
+  const tasksQuery = api.tasks.getCashierTasks.useQuery(
+    { outletId: activeOutletId ?? "" },
+    {
+      enabled: !!activeOutletId,
+      staleTime: 30_000,
+      refetchInterval: activeOutletId ? 15_000 : false,
+    },
+  );
+  const updateTaskStatus = api.tasks.updateTaskStatus.useMutation({
+    onSuccess: () => {
+      void tasksQuery.refetch();
+    },
+  });
 
   // Cache products on load
   useEffect(() => {
@@ -368,6 +441,17 @@ export default function CashierPageRedesign() {
         paymentReference: undefined,
       });
 
+      if (result.promotions.length) {
+        const promoNames = result.promotions
+          .map((promo) => promo.name)
+          .join(", ");
+        toast.info(
+          `Promo otomatis: ${promoNames} (${formatCurrency(
+            result.promotionDiscount,
+          )} off)`,
+        );
+      }
+
       // Clear cart and reset
       setCart([]);
       setManualDiscount(0);
@@ -395,6 +479,29 @@ export default function CashierPageRedesign() {
     setTimeout(() => {
       searchInputRef.current?.focus();
     }, 100);
+  };
+
+  const handleTaskToggle = async (task: CashierTaskItem) => {
+    if (!activeOutletId) {
+      toast.error("Pilih outlet terlebih dahulu");
+      return;
+    }
+
+    const nextStatus = task.status === "pending" ? "complete" : "pending";
+
+    try {
+      await updateTaskStatus.mutateAsync({
+        outletId: activeOutletId,
+        taskId: task.id,
+        status: nextStatus,
+        notes: task.notes ?? undefined,
+      });
+      toast.success("Status tugas diperbarui");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Gagal memperbarui tugas";
+      toast.error(message);
+    }
   };
 
   const handleOpenShift = async () => {
@@ -724,21 +831,38 @@ export default function CashierPageRedesign() {
 
         {/* Right Side - Payment Summary (40%) */}
         <div className="hidden w-[40%] overflow-y-auto bg-muted/20 p-6 lg:block">
-          <CashierPaymentSummary
-            cart={cart}
-            subtotal={totals.totalGross}
-            itemDiscounts={totals.itemDiscounts}
-            manualDiscount={manualDiscount}
-            maxDiscountPercent={DISCOUNT_LIMIT_PERCENT}
-            totalNet={totals.totalNet}
-            paymentMethod={paymentMethod}
-            isProcessing={isProcessing}
-            recentTransaction={recentTransaction}
-            qrisCode={qrisCode}
-            onPaymentMethodChange={setPaymentMethod}
-            onManualDiscountChange={handleManualDiscountChange}
-            onCheckout={handleOpenPaymentDialog}
-          />
+          <div className="space-y-4">
+            <CashierPaymentSummary
+              cart={cart}
+              subtotal={totals.totalGross}
+              itemDiscounts={totals.itemDiscounts}
+              manualDiscount={manualDiscount}
+              maxDiscountPercent={DISCOUNT_LIMIT_PERCENT}
+              totalNet={totals.totalNet}
+              paymentMethod={paymentMethod}
+              isProcessing={isProcessing}
+              recentTransaction={recentTransaction}
+              qrisCode={qrisCode}
+              onPaymentMethodChange={setPaymentMethod}
+              onManualDiscountChange={handleManualDiscountChange}
+              onCheckout={handleOpenPaymentDialog}
+            />
+
+            <PromotionPanel
+              promotions={promotionsQuery.data ?? []}
+              isLoading={promotionsQuery.isFetching}
+            />
+
+            {activeOutletId && (
+              <TaskPanel
+                tasks={tasksQuery.data?.tasks ?? []}
+                alerts={tasksQuery.data?.alerts ?? []}
+                isLoading={tasksQuery.isFetching}
+                isMutating={updateTaskStatus.isPending}
+                onTaskToggle={handleTaskToggle}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -752,6 +876,22 @@ export default function CashierPageRedesign() {
         >
           Bayar (F2) • {formatCurrency(totals.totalNet)}
         </Button>
+      </div>
+
+      <div className="space-y-4 border-t bg-muted/10 p-4 lg:hidden">
+        <PromotionPanel
+          promotions={promotionsQuery.data ?? []}
+          isLoading={promotionsQuery.isFetching}
+        />
+        {activeOutletId && (
+          <TaskPanel
+            tasks={tasksQuery.data?.tasks ?? []}
+            alerts={tasksQuery.data?.alerts ?? []}
+            isLoading={tasksQuery.isFetching}
+            isMutating={updateTaskStatus.isPending}
+            onTaskToggle={handleTaskToggle}
+          />
+        )}
       </div>
 
       {/* Payment Modal (Normal Mode) */}
@@ -900,6 +1040,162 @@ export default function CashierPageRedesign() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+type PromotionPanelProps = {
+  promotions: PromotionDisplay[];
+  isLoading: boolean;
+};
+
+function PromotionPanel({ promotions, isLoading }: PromotionPanelProps) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">Promo Aktif</p>
+          <p className="text-xs text-muted-foreground">
+            Promo yang otomatis diterapkan di checkout
+          </p>
+        </div>
+        <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+          Otomatis
+        </span>
+      </div>
+      <div className="space-y-3">
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Memuat promo...</p>
+        ) : promotions.length ? (
+          promotions.map((promotion) => (
+            <div
+              key={promotion.id}
+              className="rounded-xl border border-border bg-background/60 p-3"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold">{promotion.name}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {PROMOTION_LABELS[promotion.type]}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {promotion.description ??
+                      describePromotionRules(promotion.rules)}
+                  </p>
+                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {promotion.isGlobal ? "Global" : "Outlet"}
+                </span>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Tidak ada promo aktif untuk outlet ini.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type TaskPanelProps = {
+  tasks: CashierTaskItem[];
+  alerts: TaskAlert[];
+  isLoading: boolean;
+  isMutating: boolean;
+  onTaskToggle: (task: CashierTaskItem) => void;
+};
+
+function TaskPanel({
+  tasks,
+  alerts,
+  isLoading,
+  isMutating,
+  onTaskToggle,
+}: TaskPanelProps) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-3">
+        <p className="text-sm font-semibold">Tugas Kasir</p>
+        <p className="text-xs text-muted-foreground">
+          Pantau tugas harian & alert stok rendah
+        </p>
+      </div>
+      <div className="space-y-3">
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Memuat tugas...</p>
+        ) : tasks.length ? (
+          tasks.map((task) => (
+            <div
+              key={task.id}
+              className="flex items-start justify-between gap-4 rounded-xl border border-border bg-background/60 p-3"
+            >
+              <div className="flex-1">
+                <p className="text-sm font-semibold">{task.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {task.description}
+                </p>
+                {task.notes ? (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Catatan: {task.notes}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-1 text-[11px] font-semibold",
+                    taskStatusClass(task.status),
+                  )}
+                >
+                  {task.status === "pending" ? "Pending" : "Selesai"}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onTaskToggle(task)}
+                  disabled={isMutating}
+                >
+                  {task.status === "pending" ? "Tandai selesai" : "Buka kembali"}
+                </Button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Tidak ada tugas mendesak saat ini.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 border-t border-border pt-3">
+        <p className="text-sm font-semibold">Low-stock Alerts</p>
+        {alerts.length ? (
+          <div className="mt-2 space-y-2">
+            {alerts.map((alert) => (
+              <div
+                key={alert.productId}
+                className="flex items-center justify-between rounded-lg bg-muted/70 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium">{alert.productName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Stok: {alert.quantity} • Min: {alert.minStock ?? "tidak diset"}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-destructive">
+                  Restock
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Semuanya aman di rak kasir.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

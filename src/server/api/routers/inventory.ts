@@ -1,7 +1,17 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { db } from "@/server/db";
-import { protectedProcedure, router } from "@/server/api/trpc";
+import {
+  getOutletAccessFromContext,
+  protectedOutletProcedure,
+  protectedProcedure,
+  requireOutletAccess,
+  router,
+} from "@/server/api/trpc";
+import {
+  assertOutletAccess,
+} from "@/server/api/utils/access";
 
 const lowStockAlertSchema = z.object({
   id: z.string(),
@@ -23,7 +33,7 @@ const inventoryItemSchema = z.object({
 });
 
 export const inventoryRouter = router({
-  getAllInventory: protectedProcedure
+  getAllInventory: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string().min(1),
@@ -69,7 +79,7 @@ export const inventoryRouter = router({
 
       return product;
     }),
-  listLowStock: protectedProcedure
+  listLowStock: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string().min(1),
@@ -137,13 +147,28 @@ export const inventoryRouter = router({
         }),
       );
     }),
-  acknowledgeLowStock: protectedProcedure
+  acknowledgeLowStock: protectedOutletProcedure
     .input(
       z.object({
         alertId: z.string().min(1),
       }),
     )
     .mutation(async ({ input, ctx }) => {
+      const existing = await db.lowStockAlert.findUnique({
+        where: { id: input.alertId },
+        select: { outletId: true },
+      });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Low stock alert tidak ditemukan.",
+        });
+      }
+
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      assertOutletAccess(role, outletIds, existing.outletId);
+
       const alert = await db.lowStockAlert.update({
         where: { id: input.alertId },
         data: {

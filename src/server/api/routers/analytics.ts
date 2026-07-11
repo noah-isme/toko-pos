@@ -4,10 +4,18 @@
  */
 
 import { z } from "zod";
-import { router, protectedProcedure } from "@/server/api/trpc";
+import {
+  getOutletAccessFromContext,
+  protectedOutletProcedure,
+  router,
+} from "@/server/api/trpc";
+import {
+  buildOutletWhere,
+} from "@/server/api/utils/access";
 import { db } from "@/server/db";
-import { SaleStatus } from "@prisma/client";
-import { startOfDay, endOfDay, startOfWeek } from "date-fns";
+import { Role } from "@/server/db/enums";
+import { SaleStatus, TaskStatus } from "@prisma/client";
+import { startOfDay, endOfDay, startOfWeek, subDays } from "date-fns";
 
 // ============================================================================
 // Input/Output Schemas
@@ -165,6 +173,53 @@ const activityLogOutputSchema = z.object({
   hasMore: z.boolean(),
 });
 
+const promotionUsageInputSchema = z.object({
+  outletId: z.string().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+
+const promotionUsageSummarySchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  totalRedemptions: z.number(),
+  totalDiscount: z.number(),
+  redemptionRate: z.number(),
+  topPromotions: z.array(
+    z.object({
+      promotionId: z.string(),
+      name: z.string().nullable(),
+      redemptions: z.number(),
+      discount: z.number(),
+    }),
+  ),
+});
+
+const taskFeedbackInputSchema = z.object({
+  outletId: z.string().optional(),
+  limit: z.number().int().min(1).max(20).default(10),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+
+const taskFeedbackSummarySchema = z.object({
+  outletId: z.string().nullable(),
+  period: z.object({
+    from: z.string(),
+    to: z.string(),
+  }),
+  pendingTasks: z.number(),
+  completedTasks: z.number(),
+  criticalAlerts: z.number(),
+  recentNotes: z.array(
+    z.object({
+      taskId: z.string(),
+      notes: z.string(),
+      updatedAt: z.string(),
+    }),
+  ),
+});
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -207,15 +262,16 @@ export const analyticsRouter = router({
    * Get KPI Summary
    * Returns key performance indicators with trend comparison
    */
-  getKpiSummary: protectedProcedure
+  getKpiSummary: protectedOutletProcedure
     .input(kpiSummaryInputSchema)
     .output(kpiSummaryOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { outletId, dateRange, compareWithPrevious } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       // Build base where clause
       const baseWhere = {
-        ...(outletId && { outletId }),
+        ...buildOutletWhere(role, outletIds, outletId),
         status: SaleStatus.COMPLETED,
       };
 
@@ -405,15 +461,16 @@ export const analyticsRouter = router({
    * Get Sales Trend
    * Returns time-series sales data for charting
    */
-  getSalesTrend: protectedProcedure
+  getSalesTrend: protectedOutletProcedure
     .input(salesTrendInputSchema)
     .output(salesTrendOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { outletId, dateRange, granularity } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       const sales = await db.sale.findMany({
         where: {
-          ...(outletId && { outletId }),
+          ...buildOutletWhere(role, outletIds, outletId),
           status: SaleStatus.COMPLETED,
           soldAt: {
             gte: dateRange.from,
@@ -489,16 +546,18 @@ export const analyticsRouter = router({
    * Get Category Breakdown
    * Returns sales by product category
    */
-  getCategoryBreakdown: protectedProcedure
+  getCategoryBreakdown: protectedOutletProcedure
     .input(categoryBreakdownInputSchema)
     .output(categoryBreakdownOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { outletId, dateRange } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds, outletId);
 
       const saleItems = await db.saleItem.findMany({
         where: {
           sale: {
-            ...(outletId && { outletId }),
+            ...outletWhere,
             status: SaleStatus.COMPLETED,
             soldAt: {
               gte: dateRange.from,
@@ -569,14 +628,16 @@ export const analyticsRouter = router({
    * Get Outlet Performance
    * Returns performance metrics for all outlets
    */
-  getOutletPerformance: protectedProcedure
+  getOutletPerformance: protectedOutletProcedure
     .input(outletPerformanceInputSchema)
     .output(outletPerformanceOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { dateRange } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       // Get all outlets
       const outlets = await db.outlet.findMany({
+        where: role === Role.CASHIER ? { id: { in: outletIds } } : undefined,
         select: {
           id: true,
           name: true,
@@ -670,15 +731,16 @@ export const analyticsRouter = router({
    * Get Low Stock Alerts
    * Returns products with low stock levels
    */
-  getLowStockAlerts: protectedProcedure
+  getLowStockAlerts: protectedOutletProcedure
     .input(lowStockAlertsInputSchema)
     .output(lowStockAlertsOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { outletId, threshold, limit } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       const inventoryItems = await db.inventory.findMany({
         where: {
-          ...(outletId && { outletId }),
+          ...buildOutletWhere(role, outletIds, outletId),
           quantity: {
             lte: threshold,
           },
@@ -745,18 +807,19 @@ export const analyticsRouter = router({
    * Get Shift Activity
    * Returns active and recent cash sessions
    */
-  getShiftActivity: protectedProcedure
+  getShiftActivity: protectedOutletProcedure
     .input(shiftActivityInputSchema)
     .output(shiftActivityOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { outletId, date } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       const dayStart = startOfDay(date);
       const dayEnd = endOfDay(date);
 
       const sessions = await db.cashSession.findMany({
         where: {
-          ...(outletId && { outletId }),
+          ...buildOutletWhere(role, outletIds, outletId),
           openTime: {
             gte: dayStart,
             lte: dayEnd,
@@ -822,14 +885,15 @@ export const analyticsRouter = router({
    * Get Activity Log
    * Returns recent system activities
    */
-  getActivityLog: protectedProcedure
+  getActivityLog: protectedOutletProcedure
     .input(activityLogInputSchema)
     .output(activityLogOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { outletId, dateRange, limit, offset } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       const where = {
-        ...(outletId && { outletId }),
+        ...buildOutletWhere(role, outletIds, outletId),
         ...(dateRange && {
           createdAt: {
             gte: dateRange.from,
@@ -875,5 +939,146 @@ export const analyticsRouter = router({
         total,
         hasMore: offset + limit < total,
       };
+    }),
+
+  getPromotionUsageSummary: protectedOutletProcedure
+    .input(promotionUsageInputSchema)
+    .output(promotionUsageSummarySchema)
+    .query(async ({ input, ctx }) => {
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds, input.outletId);
+
+      const now = new Date();
+      const from = input.from ? new Date(input.from) : startOfDay(subDays(now, 30));
+      const to = input.to ? new Date(input.to) : now;
+
+      const usageWhere = {
+        ...outletWhere,
+        appliedAt: {
+          gte: from,
+          lte: to,
+        },
+      };
+
+      const saleWhere = {
+        ...outletWhere,
+        soldAt: {
+          gte: from,
+          lte: to,
+        },
+      };
+
+      const totalDiscountAgg = await db.promotionUsage.aggregate({
+        where: usageWhere,
+        _sum: {
+          discountAmount: true,
+        },
+      });
+
+      const uniqueSales = await db.promotionUsage.groupBy({
+        where: usageWhere,
+        by: ["saleId"],
+      });
+
+      const topPromotions = await db.promotionUsage.groupBy({
+        where: usageWhere,
+        by: ["promotionId"],
+        _count: { promotionId: true },
+        _sum: { discountAmount: true },
+        orderBy: {
+          _count: { promotionId: "desc" },
+        },
+        take: 5,
+      });
+
+      const promotions = await db.promotion.findMany({
+        where: {
+          id: { in: topPromotions.map((row) => row.promotionId) },
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      const promotionNameMap = new Map(promotions.map((promo) => [promo.id, promo.name]));
+
+      const totalSales = await db.sale.count({
+        where: saleWhere,
+      });
+
+      const totalDiscount = Number(totalDiscountAgg._sum.discountAmount ?? 0);
+      const redemptionRate = totalSales > 0 ? uniqueSales.length / totalSales : 0;
+
+      return promotionUsageSummarySchema.parse({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        totalRedemptions: uniqueSales.length,
+        totalDiscount,
+        redemptionRate,
+        topPromotions: topPromotions.map((row) => ({
+          promotionId: row.promotionId,
+          name: promotionNameMap.get(row.promotionId) ?? null,
+          redemptions: row._count.promotionId,
+          discount: Number(row._sum.discountAmount ?? 0),
+        })),
+      });
+    }),
+  getTaskFeedbackSummary: protectedOutletProcedure
+    .input(taskFeedbackInputSchema)
+    .output(taskFeedbackSummarySchema)
+    .query(async ({ input, ctx }) => {
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds, input.outletId);
+      const now = new Date();
+      const from = input.from ? new Date(input.from) : startOfDay(subDays(now, 7));
+      const to = input.to ? new Date(input.to) : now;
+
+      const statuses = await db.cashierTaskStatus.findMany({
+        where: {
+          ...outletWhere,
+          updatedAt: {
+            gte: from,
+            lte: to,
+          },
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        take: input.limit,
+      });
+
+      const pendingTasks = statuses.filter(
+        (row) => row.status === TaskStatus.PENDING,
+      ).length;
+      const completedTasks = statuses.filter(
+        (row) => row.status === TaskStatus.COMPLETE,
+      ).length;
+
+      const criticalAlerts = await db.lowStockAlert.count({
+        where: {
+          ...outletWhere,
+          clearedAt: null,
+        },
+      });
+
+      return taskFeedbackSummarySchema.parse({
+        outletId: input.outletId ?? null,
+        period: {
+          from: from.toISOString(),
+          to: to.toISOString(),
+        },
+        pendingTasks,
+        completedTasks,
+        criticalAlerts,
+        recentNotes: statuses
+          .filter((row) => row.notes)
+          .slice(0, 5)
+          .map((row) => ({
+            taskId: row.taskId,
+            notes: row.notes!,
+            updatedAt: row.updatedAt.toISOString(),
+          })),
+      });
     }),
 });

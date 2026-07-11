@@ -107,12 +107,21 @@ export const recentSalesOutputSchema = z.array(
   }),
 );
 
+const promotionSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  discount: z.number(),
+  description: z.string().nullable(),
+});
+
 export const recordSaleOutputSchema = z.object({
   id: z.string(),
   receiptNumber: z.string(),
   totalNet: z.number(),
   soldAt: z.string(),
   taxAmount: z.number().nullable(),
+  promotionDiscount: z.number(),
+  promotions: z.array(promotionSummarySchema),
 });
 
 export const printReceiptInputSchema = z.object({
