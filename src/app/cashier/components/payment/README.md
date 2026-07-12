@@ -152,8 +152,8 @@ const handlePaymentComplete = async (
 ## 🔗 Related
 
 - [Full Documentation](../../../../docs/PAYMENT_MODAL_IMPLEMENTATION.md)
-- [Cashier Redesign](../../../../docs/CASHIER_REDESIGN.md)
-- [Migration Guide](../../../../docs/CASHIER_MIGRATION_GUIDE.md)
+- [Cashier Redesign](../../../../docs/archive/CASHIER_REDESIGN.md)
+- [Migration Guide](../../../../docs/archive/CASHIER_MIGRATION_GUIDE.md)
 
 ## 📝 Notes
 

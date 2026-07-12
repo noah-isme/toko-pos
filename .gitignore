@@ -29,6 +29,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+.dev-server.log
+
+# local session transcripts
+[0-9][0-9][0-9][0-9]-[0-9][0-9]-*.txt
 
 # env files (can opt-in for committing if needed)
 .env*
