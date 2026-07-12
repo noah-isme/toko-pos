@@ -317,8 +317,8 @@ export default function ReportsPage() {
                     }}
                   />
                   <Tooltip
-                    formatter={(value: number) => [
-                      formatCurrency(value),
+                    formatter={(value) => [
+                      formatCurrency(Number(value)),
                       "Penjualan",
                     ]}
                     contentStyle={{

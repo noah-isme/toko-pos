@@ -458,9 +458,9 @@ export default function DailyReportPage() {
                       className="text-xs"
                     />
                     <Tooltip
-                      formatter={(value: number, name) =>
+                      formatter={(value, name) =>
                         name === "Omzet"
-                          ? [formatCurrency(value), "Omzet"]
+                          ? [formatCurrency(Number(value)), "Omzet"]
                           : [value, "Transaksi"]
                       }
                       labelFormatter={(label) => label}
