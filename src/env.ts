@@ -27,6 +27,10 @@ const envSchema = z.object({
       },
     ),
   SUPABASE_URL: z.string().url().optional(),
+  // New Supabase API keys (2025+). Publishable key replaces the legacy anon key.
+  SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
+  SUPABASE_SECRET_KEY: z.string().optional(),
+  // Legacy anon key, kept as a fallback until fully migrated.
   SUPABASE_ANON_KEY: z.string().optional(),
   STORE_NPWP: z.string().optional(),
   DISCOUNT_LIMIT_PERCENT: z.coerce.number().min(0).max(100).default(50),
@@ -49,6 +53,8 @@ const parsed = envSchema.safeParse({
   EMAIL_SERVER_PASSWORD: maybe(process.env.EMAIL_SERVER_PASSWORD),
   EMAIL_FROM: maybe(process.env.EMAIL_FROM),
   SUPABASE_URL: maybe(process.env.SUPABASE_URL),
+  SUPABASE_PUBLISHABLE_KEY: maybe(process.env.SUPABASE_PUBLISHABLE_KEY),
+  SUPABASE_SECRET_KEY: maybe(process.env.SUPABASE_SECRET_KEY),
   SUPABASE_ANON_KEY: maybe(process.env.SUPABASE_ANON_KEY),
   STORE_NPWP: maybe(process.env.STORE_NPWP),
   DISCOUNT_LIMIT_PERCENT: maybe(process.env.DISCOUNT_LIMIT_PERCENT),
@@ -63,3 +69,14 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/**
+ * The effective public Supabase key for browser/client use.
+ * Prefers the new publishable key ("sb_publishable_...") and falls back to the
+ * legacy anon key while the migration is in progress.
+ */
+export const supabasePublicKey =
+  env.SUPABASE_PUBLISHABLE_KEY ?? env.SUPABASE_ANON_KEY;
+
+/** True when Supabase is configured (URL + any public key present). */
+export const hasSupabaseConfig = Boolean(env.SUPABASE_URL && supabasePublicKey);

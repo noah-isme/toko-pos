@@ -25,8 +25,8 @@ const buildSession = (userId: string, role: Role): Session => ({
 });
 
 const createCaller = async (session: Session) => {
-  const ctx = await createTRPCContext();
-  return appRouter.createCaller({ ...ctx, session });
+  const ctx = await createTRPCContext({ session });
+  return appRouter.createCaller(ctx);
 };
 
 describe("RBAC access checks", () => {

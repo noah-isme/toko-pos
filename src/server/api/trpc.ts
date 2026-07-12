@@ -23,8 +23,15 @@ export type TRPCContext = {
   outletAccess?: UserAccess;
 } & Record<string, unknown>;
 
-export const createTRPCContext = async (): Promise<TRPCContext> => {
-  const session = await getServerAuthSession();
+export const createTRPCContext = async (
+  overrides?: { session?: TRPCContext["session"] },
+): Promise<TRPCContext> => {
+  // Allow callers outside a request scope (e.g. tests) to inject a session,
+  // skipping getServerAuthSession() which needs Next's request headers.
+  const session =
+    overrides && "session" in overrides
+      ? (overrides.session ?? null)
+      : await getServerAuthSession();
 
   return {
     session,
@@ -142,14 +149,17 @@ type OutletResolver<TInput> = (params: {
 export const withOutletAccess = <TInput = OutletResolverInput>(
   resolveOutletIds?: OutletResolver<TInput>,
 ) =>
-  t.middleware(async ({ ctx, input, next }) => {
+  t.middleware(async ({ ctx, getRawInput, next }) => {
     if (!ctx.session?.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
 
     const outletAccess = await getUserAccess(ctx.session.user.id);
+    // `requireOutletAccess` attaches this middleware before the procedure's
+    // `.input()` parser runs, so the middleware's own `input` is undefined at
+    // this point. Read the raw input directly to resolve outlet id(s).
     const resolved = resolveOutletIds
-      ? await resolveOutletIds({ ctx, input: input as TInput })
+      ? await resolveOutletIds({ ctx, input: (await getRawInput()) as TInput })
       : undefined;
     const outletIds = (
       resolved === undefined
