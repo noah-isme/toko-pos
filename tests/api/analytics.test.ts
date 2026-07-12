@@ -37,6 +37,60 @@ describe("Analytics API Tests", () => {
   beforeAll(async () => {
     console.log("🔧 Setting up test data...");
 
+    // Idempotent pre-clean: a prior interrupted run may have left fixtures with
+    // these fixed unique keys, which would otherwise collide below.
+    const staleUser = await db.user.findUnique({
+      where: { email: "owner@test.com" },
+      select: { id: true },
+    });
+    const staleOutlet = await db.outlet.findUnique({
+      where: { code: "TEST-OUTLET-001" },
+      select: { id: true },
+    });
+    if (staleUser || staleOutlet) {
+      const outletIds = staleOutlet ? [staleOutlet.id] : [];
+      const staleSales = await db.sale.findMany({
+        where: {
+          OR: [
+            ...(staleUser ? [{ cashierId: staleUser.id }] : []),
+            ...(outletIds.length ? [{ outletId: { in: outletIds } }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      const saleIds = staleSales.map((s) => s.id);
+      const items = await db.saleItem.findMany({
+        where: { saleId: { in: saleIds } },
+        select: { id: true },
+      });
+      await db.refundItem.deleteMany({
+        where: { saleItemId: { in: items.map((i) => i.id) } },
+      });
+      await db.refund.deleteMany({ where: { saleId: { in: saleIds } } });
+      await db.payment.deleteMany({ where: { saleId: { in: saleIds } } });
+      await db.saleItem.deleteMany({ where: { saleId: { in: saleIds } } });
+      await db.sale.deleteMany({ where: { id: { in: saleIds } } });
+      if (staleUser) {
+        await db.activityLog.deleteMany({ where: { userId: staleUser.id } });
+      }
+      if (outletIds.length) {
+        await db.activityLog.deleteMany({
+          where: { outletId: { in: outletIds } },
+        });
+        await db.cashSession.deleteMany({
+          where: { outletId: { in: outletIds } },
+        });
+        await db.inventory.deleteMany({ where: { outletId: { in: outletIds } } });
+      }
+      await db.product.deleteMany({ where: { sku: "TEST-001" } });
+      if (outletIds.length) {
+        await db.outlet.deleteMany({ where: { id: { in: outletIds } } });
+      }
+      if (staleUser) {
+        await db.user.delete({ where: { id: staleUser.id } });
+      }
+    }
+
     // Create test user
     const user = await db.user.create({
       data: {
@@ -175,9 +229,8 @@ describe("Analytics API Tests", () => {
   // ============================================================================
 
   const createCaller = async () => {
-    const ctx = await createTRPCContext();
-    // Override session for testing
-    return appRouter.createCaller({ ...ctx, session: mockSession });
+    const ctx = await createTRPCContext({ session: mockSession });
+    return appRouter.createCaller(ctx);
   };
 
   // ============================================================================

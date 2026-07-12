@@ -31,8 +31,10 @@ import {
   ensurePaymentsCoverTotal,
   enforceDiscountLimit,
   normalizePaperSize,
+  roundCurrency,
 } from "@/server/api/services/sales-validation";
 import { db } from "@/server/db";
+import { applyPromotionsToSale } from "@/server/services/promotions";
 import {
   protectedProcedure,
   router,
@@ -463,6 +465,11 @@ export const salesRouter = router({
           });
         }
 
+        const userId = ctx.session?.user.id;
+        if (!userId) {
+          throw new TRPCError({ code: "UNAUTHORIZED" });
+        }
+
         const financials = calculateFinancials({
           items: input.items,
           discountTotal: input.discountTotal,
@@ -477,7 +484,21 @@ export const salesRouter = router({
           env.DISCOUNT_LIMIT_PERCENT,
         );
 
-        ensurePaymentsCoverTotal(input.payments, financials.totalNet);
+        const promotionResult = await applyPromotionsToSale({
+          outletId: input.outletId,
+          items: input.items,
+          totalGross: financials.totalGross,
+        });
+
+        const promotionDiscount = promotionResult.discount;
+        const totalDiscountWithPromotions = roundCurrency(
+          financials.totalDiscount + promotionDiscount,
+        );
+        const finalTotalNet = roundCurrency(
+          Math.max(financials.totalNet - promotionDiscount, 0),
+        );
+
+        ensurePaymentsCoverTotal(input.payments, finalTotalNet);
 
         const affectedKeys = new Set<string>();
 
@@ -490,8 +511,10 @@ export const salesRouter = router({
               sessionId: ctx.activeShift.id,
               soldAt: input.soldAt ? new Date(input.soldAt) : new Date(),
               totalGross: toDecimal(financials.totalGross),
-              discountTotal: toDecimal(financials.totalDiscount),
-              totalNet: toDecimal(financials.totalNet),
+              discountTotal: toDecimal(totalDiscountWithPromotions),
+              totalNet: toDecimal(finalTotalNet),
+              promotionDiscount: toDecimal(promotionDiscount),
+              promotionDetails: promotionResult.promotions,
               taxRate:
                 input.applyTax && input.taxRate
                   ? toDecimal(input.taxRate)
@@ -533,6 +556,23 @@ export const salesRouter = router({
               payments: true,
             },
           });
+
+          if (promotionResult.promotions.length > 0) {
+            await tx.promotionUsage.createMany({
+              data: promotionResult.promotions.map((promotion) => ({
+                saleId: createdSale.id,
+                promotionId: promotion.id,
+                userId,
+                outletId: input.outletId,
+                discountAmount: toDecimal(promotion.discount),
+                details: {
+                  name: promotion.name,
+                  description: promotion.description,
+                  discount: promotion.discount,
+                },
+              })),
+            });
+          }
 
           await Promise.all(
             input.items.map(async (item) => {
@@ -630,6 +670,8 @@ export const salesRouter = router({
           totalNet: Number(sale.totalNet),
           soldAt: sale.soldAt.toISOString(),
           taxAmount: sale.taxAmount ? Number(sale.taxAmount) : null,
+          promotionDiscount: Number(sale.promotionDiscount ?? 0),
+          promotions: promotionResult.promotions,
         });
       } catch (error) {
         if (error instanceof SaleValidationError) {

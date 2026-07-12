@@ -2,17 +2,30 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { db } from "@/server/db";
-import { protectedProcedure, router } from "@/server/api/trpc";
+import {
+  getOutletAccessFromContext,
+  protectedOutletProcedure,
+  protectedProcedure,
+  requireOutletAccess,
+  router,
+} from "@/server/api/trpc";
+import {
+  assertAdminOrOwner,
+} from "@/server/api/utils/access";
+import { Role } from "@/server/db/enums";
 import {
   outletListOutputSchema,
   outletUpsertInputSchema,
 } from "@/server/api/schemas/outlets";
 
 export const outletsRouter = router({
-  list: protectedProcedure
+  list: protectedOutletProcedure
     .output(outletListOutputSchema)
-    .query(async () => {
+    .query(async ({ ctx }) => {
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+
       const outlets = await db.outlet.findMany({
+        where: role === Role.CASHIER ? { id: { in: outletIds } } : undefined,
         orderBy: {
           name: "asc",
         },
@@ -29,9 +42,12 @@ export const outletsRouter = router({
         })),
       );
     }),
-  upsert: protectedProcedure
+  upsert: protectedOutletProcedure
     .input(outletUpsertInputSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const { role } = getOutletAccessFromContext(ctx);
+      assertAdminOrOwner(role);
+
       const outlet = await db.outlet.upsert({
         where: {
           id: input.id ?? "",
@@ -50,7 +66,7 @@ export const outletsRouter = router({
 
       return outlet;
     }),
-  getStockSnapshot: protectedProcedure
+  getStockSnapshot: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string(),
@@ -74,7 +90,7 @@ export const outletsRouter = router({
         costPrice: row.costPrice ? Number(row.costPrice) : null,
       }));
     }),
-  adjustStock: protectedProcedure
+  adjustStock: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string(),
@@ -86,24 +102,41 @@ export const outletsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const userId = ctx.session.user.id;
       return await db.$transaction(async (tx) => {
-        const inventory = await tx.inventory.upsert({
+        const existing = await tx.inventory.findUnique({
           where: {
             productId_outletId: {
               productId: input.productId,
               outletId: input.outletId,
             },
           },
-          update: {
-            quantity: {
-              increment: input.quantity,
-            },
-          },
-          create: {
-            productId: input.productId,
-            outletId: input.outletId,
-            quantity: input.quantity,
-          },
         });
+
+        if (
+          input.quantity < 0 &&
+          (!existing || existing.quantity + input.quantity < 0)
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Stok tidak mencukupi untuk penyesuaian.",
+          });
+        }
+
+        const inventory = existing
+          ? await tx.inventory.update({
+              where: { id: existing.id },
+              data: {
+                quantity: {
+                  increment: input.quantity,
+                },
+              },
+            })
+          : await tx.inventory.create({
+              data: {
+                productId: input.productId,
+                outletId: input.outletId,
+                quantity: input.quantity,
+              },
+            });
 
         await tx.stockMovement.create({
           data: {
@@ -120,7 +153,10 @@ export const outletsRouter = router({
         return inventory;
       });
     }),
-  transferStock: protectedProcedure
+  transferStock: requireOutletAccess(({ input }) => [
+    input.fromOutletId,
+    input.toOutletId,
+  ])
     .input(
       z.object({
         productId: z.string(),
@@ -213,7 +249,7 @@ export const outletsRouter = router({
         };
       });
     }),
-  performOpname: protectedProcedure
+  performOpname: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string(),
@@ -286,7 +322,7 @@ export const outletsRouter = router({
         return results;
       });
     }),
-  lowStock: protectedProcedure
+  lowStock: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string(),

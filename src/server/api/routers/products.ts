@@ -27,7 +27,15 @@ import {
 } from "@/server/api/schemas/products";
 import { z } from "zod";
 import { db } from "@/server/db";
-import { protectedProcedure, publicProcedure, router } from "@/server/api/trpc";
+import {
+  getOutletAccessFromContext,
+  protectedOutletProcedure,
+  protectedProcedure,
+  publicProcedure,
+  requireOutletAccess,
+  router,
+} from "@/server/api/trpc";
+import { buildOutletWhere } from "@/server/api/utils/access";
 
 const toDecimal = (value?: number | null) =>
   typeof value === "number" ? new Prisma.Decimal(value.toFixed(2)) : undefined;
@@ -104,13 +112,16 @@ export const productsRouter = router({
         })),
       );
     }),
-  getInventoryByProduct: protectedProcedure
+  getInventoryByProduct: protectedOutletProcedure
     .input(productInventoryInputSchema)
     .output(productInventoryListSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds);
       const inventories = await db.inventory.findMany({
         where: {
           productId: input.productId,
+          ...outletWhere,
         },
         include: {
           outlet: true,
@@ -131,14 +142,17 @@ export const productsRouter = router({
         })),
       );
     }),
-  getStockMovements: protectedProcedure
+  getStockMovements: protectedOutletProcedure
     .input(stockMovementListInputSchema)
     .output(stockMovementListOutputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds);
       const movements = await db.stockMovement.findMany({
         where: {
           inventory: {
             productId: input.productId,
+            ...outletWhere,
           },
         },
         include: {
@@ -159,7 +173,7 @@ export const productsRouter = router({
 
       return stockMovementListOutputSchema.parse(movements.map(mapMovement));
     }),
-  createStockAdjustment: protectedProcedure
+  createStockAdjustment: requireOutletAccess(({ input }) => input.outletId)
     .input(stockAdjustmentInputSchema)
     .output(stockAdjustmentOutputSchema)
     .mutation(async ({ input, ctx }) => {

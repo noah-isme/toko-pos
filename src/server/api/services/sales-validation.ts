@@ -40,7 +40,7 @@ export type SaleFinancials = {
   totalNet: number;
 };
 
-const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+export const roundCurrency = (value: number) => Math.round(value * 100) / 100;
 
 export const validateItems = (items: SaleItemCalculation[]): {
   totalGross: number;

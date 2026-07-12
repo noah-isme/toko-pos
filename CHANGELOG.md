@@ -9,6 +9,23 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
 ### Added
 
+- **Promotion engine**: model Prisma `Promotion`, `PromotionOutlet`, `PromotionUsage` (+ enum `PromotionType`), service `applyPromotionsToSale` (BUY_X_GET_Y, BUNDLE_DISCOUNT, TIERED_DISCOUNT), router `promotionsRouter` (`list`, `simulate`, `create`), auto-apply di `sales.recordSale`, panel promo di halaman kasir, dan halaman admin `/management/promotions`.
+- **Task center kasir**: model `CashierTaskStatus` (+ enum `TaskStatus`), router `tasksRouter` (`getCashierTasks`, `updateTaskStatus`), panel tugas + low-stock alert di halaman kasir, serta ringkasan `analytics.getTaskFeedbackSummary` dan `analytics.getPromotionUsageSummary`.
+- **RBAC outlet scoping**: middleware `withOutletAccess`/`protectedOutletProcedure`/`requireOutletAccess` dan helper `@/server/api/utils/access`, diterapkan pada router analytics, inventory, outlets, products, dan cash-sessions agar kasir hanya melihat outlet yang ditugaskan.
+- Suite test `tests/api/rbac.test.ts` untuk memverifikasi pembatasan akses per-outlet.
+- Guard endpoint debug (`/api/debug-*`) di belakang role ADMIN/OWNER dan dinonaktifkan saat `NODE_ENV=production`.
+
+### Fixed
+
+- Typecheck proyek dari **54 error menjadi 0**:
+  - `withOutletAccess` tidak lagi memberi tipe `unknown` pada resolver input dan tidak lagi menyebar `...ctx` yang membuat `session` menjadi nullable.
+  - `promotionsRouter` mengimpor `assertAdminOrOwner` dari lokasi yang benar (`utils/access`).
+  - `applyPromotionsToSale` mem-parse rule per-tipe sehingga union ter-narrow dengan benar.
+- **Diskon promo untuk barang yang tidak dibeli**: BUY_X_GET_Y kini mewajibkan item hadiah ada di keranjang dan membatasi unit hadiah ke `min(rewardQty × triggers, qty di cart)`.
+- **Pencatatan `PromotionUsage` ganda**: menghapus blok `createMany` duplikat di `recordSale` dan menambahkan constraint `@@unique([saleId, promotionId])`.
+- Klien promo diselaraskan dengan kontrak router: `simulate` menjadi mutation, membaca `from`/`to` (bukan `period.from`), dan semua status mutation memakai `isPending` (React Query v5) alih-alih `isLoading`.
+- `Button size="xs"` yang tidak valid pada panel tugas diganti `sm`.
+
 - Inventory router (`inventoryRouter`) dengan mutation `setProductMinStock`, query `listLowStock`, dan `acknowledgeLowStock` lengkap dengan `LowStockAlert` persistence.
 - UI produk: field **Stok Minimum**, kolom **Min Stock** & **Status Stok**, badge “Low”, action cepat **Set Min Stock**, serta toggle filter **Tampilkan hanya yang Low Stock**.
 - Widget Dashboard low-stock yang mengambil data alert per outlet aktif + tombol Acknowledge.

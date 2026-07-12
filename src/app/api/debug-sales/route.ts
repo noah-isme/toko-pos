@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
+import { getServerAuthSession } from "@/server/auth";
 import { db } from "@/server/db";
+import { Role } from "@/server/db/enums";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const session = await getServerAuthSession();
+  if (
+    !session?.user ||
+    (session.user.role !== Role.ADMIN && session.user.role !== Role.OWNER)
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const dateStr = searchParams.get("date") || "2025-12-03";

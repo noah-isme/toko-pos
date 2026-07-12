@@ -1,4 +1,25 @@
+import { getServerAuthSession } from "@/server/auth";
+import { Role } from "@/server/db/enums";
+
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return new Response(JSON.stringify({ error: "Not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const session = await getServerAuthSession();
+  if (
+    !session?.user ||
+    (session.user.role !== Role.ADMIN && session.user.role !== Role.OWNER)
+  ) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const mod = await import('@/server/auth');
     const keys = Object.keys(mod || {});

@@ -3,8 +3,15 @@ import superjson from "superjson";
 import { ZodError } from "zod";
 
 import { getServerAuthSession } from "@/server/auth";
+import {
+  assertOutletAccess,
+  ensureCashierOutletAccess,
+  getUserAccess,
+  type UserAccess,
+} from "@/server/api/utils/access";
 import { db } from "@/server/db";
 import { Prisma } from "@/server/db/enums";
+import { Role } from "@/server/db/enums";
 
 type CashSessionWithUser = Prisma.CashSessionGetPayload<{
   include: { user: { select: { id: true; name: true } } };
@@ -13,10 +20,18 @@ type CashSessionWithUser = Prisma.CashSessionGetPayload<{
 export type TRPCContext = {
   session: Awaited<ReturnType<typeof getServerAuthSession>>;
   activeShift?: CashSessionWithUser;
+  outletAccess?: UserAccess;
 } & Record<string, unknown>;
 
-export const createTRPCContext = async (): Promise<TRPCContext> => {
-  const session = await getServerAuthSession();
+export const createTRPCContext = async (
+  overrides?: { session?: TRPCContext["session"] },
+): Promise<TRPCContext> => {
+  // Allow callers outside a request scope (e.g. tests) to inject a session,
+  // skipping getServerAuthSession() which needs Next's request headers.
+  const session =
+    overrides && "session" in overrides
+      ? (overrides.session ?? null)
+      : await getServerAuthSession();
 
   return {
     session,
@@ -97,9 +112,10 @@ export const requireActiveShift = <TInput>(
       });
     }
 
+    // Only return the ctx patch; tRPC merges it with the existing context, so
+    // spreading `...ctx` here would re-widen `session` back to nullable.
     return next({
       ctx: {
-        ...ctx,
         ...resolution.context,
         activeShift,
       },
@@ -109,3 +125,82 @@ export const requireActiveShift = <TInput>(
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(enforceUserIsAuthed);
+
+/**
+ * Default shape for resolvers that pull outlet id(s) off the validated input.
+ * Covers the single-outlet procedures (`outletId`) and the transfer procedure
+ * (`fromOutletId`/`toOutletId`). Call sites can override `TInput` when needed.
+ */
+type OutletResolverInput = {
+  outletId?: string;
+  fromOutletId?: string;
+  toOutletId?: string;
+};
+
+type OutletResolver<TInput> = (params: {
+  ctx: TRPCContext;
+  input: TInput;
+}) =>
+  | string
+  | ReadonlyArray<string | undefined>
+  | undefined
+  | Promise<string | ReadonlyArray<string | undefined> | undefined>;
+
+export const withOutletAccess = <TInput = OutletResolverInput>(
+  resolveOutletIds?: OutletResolver<TInput>,
+) =>
+  t.middleware(async ({ ctx, getRawInput, next }) => {
+    if (!ctx.session?.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+
+    const outletAccess = await getUserAccess(ctx.session.user.id);
+    // `requireOutletAccess` attaches this middleware before the procedure's
+    // `.input()` parser runs, so the middleware's own `input` is undefined at
+    // this point. Read the raw input directly to resolve outlet id(s).
+    const resolved = resolveOutletIds
+      ? await resolveOutletIds({ ctx, input: (await getRawInput()) as TInput })
+      : undefined;
+    const outletIds = (
+      resolved === undefined
+        ? []
+        : Array.isArray(resolved)
+          ? resolved
+          : [resolved]
+    ).filter((value): value is string => typeof value === "string");
+
+    if (outletIds.length > 0) {
+      for (const outletId of outletIds) {
+        assertOutletAccess(outletAccess.role, outletAccess.outletIds, outletId);
+      }
+    } else if (outletAccess.role === Role.CASHIER) {
+      ensureCashierOutletAccess(outletAccess.role, outletAccess.outletIds);
+    }
+
+    // Return only the ctx patch so tRPC merges it, preserving the non-null
+    // `session` narrowing from `protectedProcedure`.
+    return next({
+      ctx: {
+        outletAccess,
+      },
+    });
+  });
+
+export const protectedOutletProcedure = protectedProcedure.use(
+  withOutletAccess(),
+);
+
+export const requireOutletAccess = <TInput = OutletResolverInput>(
+  resolveOutletIds: OutletResolver<TInput>,
+) => protectedProcedure.use(withOutletAccess(resolveOutletIds));
+
+export const getOutletAccessFromContext = (ctx: TRPCContext) => {
+  if (!ctx.outletAccess) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Outlet access context belum tersedia.",
+    });
+  }
+
+  return ctx.outletAccess;
+};

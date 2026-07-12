@@ -9,7 +9,13 @@ import {
   openCashSessionInputSchema,
 } from "@/server/api/schemas/cash-sessions";
 import { db } from "@/server/db";
-import { protectedProcedure, router } from "@/server/api/trpc";
+import {
+  getOutletAccessFromContext,
+  protectedOutletProcedure,
+  requireOutletAccess,
+  router,
+} from "@/server/api/trpc";
+import { assertOutletAccess } from "@/server/api/utils/access";
 import { writeAuditLog } from "@/server/services/audit";
 
 const toDecimal = (value: number) => new Prisma.Decimal(value.toFixed(2));
@@ -40,7 +46,7 @@ const mapSession = (session: {
   });
 
 export const cashSessionsRouter = router({
-  getActive: protectedProcedure
+  getActive: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string().min(1, { message: "Outlet wajib dipilih" }),
@@ -69,7 +75,7 @@ export const cashSessionsRouter = router({
 
       return mapSession(session);
     }),
-  open: protectedProcedure
+  open: requireOutletAccess(({ input }) => input.outletId)
     .input(openCashSessionInputSchema)
     .output(cashSessionSchema)
     .mutation(async ({ input, ctx }) => {
@@ -115,10 +121,10 @@ export const cashSessionsRouter = router({
 
       return mapSession(session);
     }),
-  close: protectedProcedure
+  close: protectedOutletProcedure
     .input(closeCashSessionInputSchema)
     .output(cashSessionSummarySchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const session = await db.cashSession.findUnique({
         where: { id: input.sessionId },
         include: {
@@ -131,6 +137,9 @@ export const cashSessionsRouter = router({
       if (!session) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Shift tidak ditemukan" });
       }
+
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      assertOutletAccess(role, outletIds, session.outletId);
 
       if (session.closeTime) {
         throw new TRPCError({
@@ -197,7 +206,7 @@ export const cashSessionsRouter = router({
         cashSalesTotal,
       });
     }),
-  list: protectedProcedure
+  list: requireOutletAccess(({ input }) => input.outletId)
     .input(
       z.object({
         outletId: z.string().min(1),

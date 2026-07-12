@@ -5,4 +5,6 @@ export {
   SaleStatus,
   StockMovementType,
   OutletRole,
+  PromotionType,
+  TaskStatus,
 } from "@prisma/client";
