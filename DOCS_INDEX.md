@@ -256,15 +256,25 @@ Gunakan [Conventional Commits](https://www.conventionalcommits.org/):
 
 ---
 
+## 📦 Archived Documentation
+
+Dokumentasi historis (redesign, phase write-up, debugging playbook, feature
+summary) telah dipindahkan ke [`docs/archive/`](./docs/archive/README.md) agar
+root repository tetap ringkas. Lihat indeksnya di
+[docs/archive/README.md](./docs/archive/README.md).
+
+---
+
 ## 🔄 Update Log
 
 | Tanggal | Perubahan | Dokumen yang terpengaruh |
 |---------|-----------|-------------------------|
 | 2025-10-14 | Initial documentation | Semua dokumen dibuat |
+| 2026-07-12 | Arsipkan 25 dokumen historis ke `docs/archive/`, hapus artefak dev | Root `.md`, `.gitignore` |
 
 ---
 
 **Catatan**: Dokumentasi ini adalah living document. Jika ada informasi yang kurang jelas atau perlu ditambahkan, silakan buat issue atau pull request.
 
 **Maintained by**: Toko POS Team  
-**Last Updated**: 2025-10-14
+**Last Updated**: 2026-07-12

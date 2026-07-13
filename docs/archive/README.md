@@ -1,0 +1,45 @@
+# 📦 Documentation Archive
+
+Historical documentation moved out of the repository root to keep it tidy.
+These files capture past redesigns, phase write-ups, debugging playbooks, and
+feature summaries. They are kept for reference but are **not** the canonical,
+actively-maintained docs — for those, see the root `README.md`, `DOCS_INDEX.md`,
+`DEPLOYMENT.md`, `MIGRATION_GUIDE.md`, and `PROJECT_SUMMARY.md`.
+
+## Contents
+
+### Redesign & UI history
+- [CASHIER_REDESIGN.md](./CASHIER_REDESIGN.md)
+- [CASHIER_REDESIGN_SUMMARY.md](./CASHIER_REDESIGN_SUMMARY.md)
+- [CASHIER_MIGRATION_GUIDE.md](./CASHIER_MIGRATION_GUIDE.md)
+- [HOME_REDESIGN_SUMMARY.md](./HOME_REDESIGN_SUMMARY.md)
+- [LOGIN_REDESIGN.md](./LOGIN_REDESIGN.md)
+- [LOGIN_REDESIGN_SUMMARY.md](./LOGIN_REDESIGN_SUMMARY.md)
+- [REDESIGN_SUMMARY.md](./REDESIGN_SUMMARY.md)
+- [QUICK_START_REDESIGN.md](./QUICK_START_REDESIGN.md)
+
+### Phase & feature write-ups
+- [PHASE_2_ENHANCEMENTS.md](./PHASE_2_ENHANCEMENTS.md)
+- [PHASE_3_IMPLEMENTATION.md](./PHASE_3_IMPLEMENTATION.md)
+- [PREMIUM_PRODUCTS_SUMMARY.md](./PREMIUM_PRODUCTS_SUMMARY.md)
+- [README_PREMIUM_PRODUCTS.md](./README_PREMIUM_PRODUCTS.md)
+- [PAYMENT_MODAL_SUMMARY.md](./PAYMENT_MODAL_SUMMARY.md)
+- [QUICK_MODE_SUMMARY.md](./QUICK_MODE_SUMMARY.md)
+- [STOCK_MANAGEMENT_PAGES.md](./STOCK_MANAGEMENT_PAGES.md)
+- [PUBLIC_NARRATIVE.md](./PUBLIC_NARRATIVE.md)
+
+### Owner dashboard
+- [OWNER_DASHBOARD_INDEX.md](./OWNER_DASHBOARD_INDEX.md)
+- [OWNER_DASHBOARD_DEPLOYMENT.md](./OWNER_DASHBOARD_DEPLOYMENT.md)
+- [OWNER_DASHBOARD_FINAL_SUMMARY.md](./OWNER_DASHBOARD_FINAL_SUMMARY.md)
+
+### API & product notes
+- [API_TESTING_QUICKSTART.md](./API_TESTING_QUICKSTART.md)
+- [PRODUCT_API_FIX.md](./PRODUCT_API_FIX.md)
+- [PRODUCT_EDIT_TROUBLESHOOTING.md](./PRODUCT_EDIT_TROUBLESHOOTING.md)
+
+### Debugging playbooks (point-in-time)
+- [DASHBOARD-DEBUG-NOW.md](./DASHBOARD-DEBUG-NOW.md)
+- [DEBUG-STEPS.md](./DEBUG-STEPS.md)
+- [FINAL-DEBUG.md](./FINAL-DEBUG.md)
+- [NO-LOOP-INSTRUCTIONS.md](./NO-LOOP-INSTRUCTIONS.md)
