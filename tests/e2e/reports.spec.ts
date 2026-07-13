@@ -29,30 +29,43 @@ test("menampilkan ringkasan laporan harian dengan metode bayar campuran", async 
           totalNet: 150000,
           soldAt: summaryDate.toISOString(),
           paymentMethods: ["CASH", "QRIS"],
+          items: [
+            { productName: "Kopi Susu", quantity: 8 },
+          ],
         },
       ],
     }),
     "sales.forecastNextDay": () => ({
       suggestedFloat: 75000,
     }),
+    // The page also fetches the outlet list (for the weekly filter) and the
+    // weekly trend. They must be stubbed or the client throws on render.
+    "outlets.list": () => [{ id: "outlet-1", name: "Outlet Pusat" }],
+    "sales.getWeeklyTrend": () => ({
+      series: [],
+      summary: {
+        currentTotalNet: 0,
+        previousTotalNet: 0,
+        changePercent: 0,
+      },
+    }),
   });
 
   await page.goto("/reports/daily");
 
-  await expect(page.getByRole("heading", { name: "Laporan Penjualan Harian" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Laporan Penjualan" })).toBeVisible();
 
   const totalTransaksiValue = page
-    .getByRole("heading", { name: "Total Transaksi" })
-    .locator("xpath=../..//div[contains(@class,'font-semibold')]");
-  // Wait for the value to render (some UIs render a placeholder like "…")
+    .getByText("Total Transaksi", { exact: true })
+    .locator("xpath=ancestor::*[contains(@class,'card-focusable')]//div[contains(@class,'font-semibold')]");
   await expect(totalTransaksiValue).not.toHaveText("…");
   await expect(totalTransaksiValue).toHaveText("1");
 
   const totalPenjualanValue = page
-    .getByRole("heading", { name: "Total Penjualan" })
-    .locator("xpath=../..//div[contains(@class,'font-semibold')]");
-  // Allow possible non-breaking spaces in currency rendering (e.g. "Rp 150.000")
+    .getByText("Total Penjualan", { exact: true })
+    .locator("xpath=ancestor::*[contains(@class,'card-focusable')]//div[contains(@class,'font-semibold')]");
   await expect(totalPenjualanValue).toContainText(/Rp\s*150\.000/);
+
   await expect(page.getByRole("cell", { name: "POS-0001" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "CASH, QRIS" })).toBeVisible();
   await expect(page.getByText(/Sarankan setoran kas awal sebesar/)).toContainText(/Rp\s*75\.000/);
