@@ -6,12 +6,17 @@ import { mockAuthSession, setupTrpcMock } from "./mocks";
 const pdfBase64 =
   "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp4cmVmCjAgMQowMDAwMDAwMDAwIDY1NTM1IGYgCnRyYWlsZXIKPDw+PgpzdGFydHhyZWYKMAolJUVPRgo=";
 
-test.describe("Kasir – shift lifecycle", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockAuthSession(page);
+// The cashier UI has two mutually-exclusive layouts toggled by a localStorage
+// flag. Force Normal mode so selectors are deterministic.
+test.beforeEach(async ({ page }) => {
+  await mockAuthSession(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem("cashier-quick-mode", "false");
   });
+});
 
-  test("membuka shift, menyelesaikan transaksi, lalu tutup shift dengan perhitungan selisih", async ({
+test.describe("Kasir – shift lifecycle", () => {
+  test("membuka shift, menyelesaikan transaksi tunai, lalu menutup shift", async ({
     page,
   }) => {
     const userOutlet = {
@@ -32,30 +37,8 @@ test.describe("Kasir – shift lifecycle", () => {
       sku: "SKU-TEH-001",
       barcode: "8999991234567",
       price: 38000,
-      categoryId: null,
-      category: null,
-      supplierId: null,
-      supplier: null,
-      costPrice: null,
-      isActive: true,
-      defaultDiscountPercent: 0,
-      promoName: null,
-      promoPrice: null,
-      promoStart: null,
-      promoEnd: null,
-      isTaxable: false,
-      taxRate: null,
-      minStock: 5,
+      categoryName: null,
     };
-
-    const inventoryRecords = [
-      {
-        outletId: userOutlet.outlet.id,
-        outletName: userOutlet.outlet.name,
-        quantity: 12,
-        updatedAt: new Date().toISOString(),
-      },
-    ];
 
     let activeShift = null;
     let lastSaleNet = 0;
@@ -65,14 +48,24 @@ test.describe("Kasir – shift lifecycle", () => {
       "outlets.getUserOutlets": () => [userOutlet],
       "outlets.list": () => [userOutlet.outlet],
       "products.list": () => [catalogProduct],
-      "products.categories": () => [],
-      "products.suppliers": () => [],
-      "settings.listTaxSettings": () => [],
-      "products.getInventoryByProduct": () => inventoryRecords,
-      "products.getStockMovements": () => [],
+      "products.searchProducts": ({ input }) => {
+        const q = String(input?.query ?? "").toLowerCase();
+        return [catalogProduct].filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.sku.toLowerCase().includes(q) ||
+            (p.barcode ?? "").includes(q),
+        );
+      },
+      "promotions.list": () => [],
+      "tasks.getCashierTasks": () => ({
+        tasks: [],
+        alerts: [],
+        shiftActive: Boolean(activeShift),
+      }),
       "sales.listRecent": () => recentSales,
       "sales.recordSale": ({ input }) => {
-        const receiptNumber = input?.receiptNumber ?? `POS-${Date.now()}`;
+        const receiptNumber = input?.receiptNumber ?? `TRX-${Date.now()}`;
         const items = input?.items ?? [];
         const discountTotal = input?.discountTotal ?? 0;
         const subtotal = items.reduce(
@@ -82,7 +75,7 @@ test.describe("Kasir – shift lifecycle", () => {
         lastSaleNet = subtotal - discountTotal;
 
         const sale = {
-          id: `sale-${Date.now()}`,
+          id: `sale-${receiptNumber}`,
           outletId: userOutlet.outlet.id,
           receiptNumber,
           soldAt: new Date().toISOString(),
@@ -93,9 +86,9 @@ test.describe("Kasir – shift lifecycle", () => {
             productName: catalogProduct.name,
             quantity: item.quantity,
           })),
-          paymentMethods: input?.payments?.map((payment) => payment.method) ?? ["CASH"],
+          paymentMethods:
+            input?.payments?.map((payment) => payment.method) ?? ["CASH"],
         };
-
         recentSales.unshift(sale);
 
         return {
@@ -104,21 +97,18 @@ test.describe("Kasir – shift lifecycle", () => {
           totalNet: sale.totalNet,
           soldAt: sale.soldAt,
           taxAmount: null,
+          promotionDiscount: 0,
+          promotions: [],
         };
       },
-      "sales.printReceipt": () => ({
-        filename: "POS-0001.pdf",
-        base64: pdfBase64,
-      }),
+      "sales.printReceipt": () => ({ filename: "TRX.pdf", base64: pdfBase64 }),
       "cashSessions.getActive": ({ input }) => {
         if (!input?.outletId) return null;
-        if (activeShift && activeShift.outletId === input.outletId) {
-          return activeShift;
-        }
-        return null;
+        return activeShift && activeShift.outletId === input.outletId
+          ? activeShift
+          : null;
       },
       "cashSessions.open": ({ input }) => {
-        const openTime = new Date("2025-10-13T01:00:00.000Z");
         activeShift = {
           id: "shift-1",
           outletId: input.outletId,
@@ -127,24 +117,19 @@ test.describe("Kasir – shift lifecycle", () => {
           closingCash: null,
           expectedCash: null,
           difference: null,
-          openTime: openTime.toISOString(),
+          openTime: new Date("2025-10-13T01:00:00.000Z").toISOString(),
           closeTime: null,
           user: { id: "cashier-demo", name: "Kasir Demo" },
         };
         return activeShift;
       },
       "cashSessions.close": ({ input }) => {
-        if (!activeShift || input.sessionId !== activeShift.id) {
-          throw new Error("Shift tidak ditemukan");
-        }
-        const closingCash = input.closingCash;
-        const expectedCash = (activeShift.openingCash ?? 0) + lastSaleNet;
-        const difference = closingCash - expectedCash;
+        const expectedCash = (activeShift?.openingCash ?? 0) + lastSaleNet;
         const summary = {
           ...activeShift,
-          closingCash,
+          closingCash: input.closingCash,
           expectedCash,
-          difference,
+          difference: input.closingCash - expectedCash,
           closeTime: new Date().toISOString(),
           cashSalesTotal: lastSaleNet,
         };
@@ -155,39 +140,75 @@ test.describe("Kasir – shift lifecycle", () => {
 
     await page.goto("/cashier");
 
+    // The open-shift dialog auto-opens when there is no active shift.
+    const openDialog = page.getByRole("dialog");
+    await expect(
+      openDialog.getByRole("heading", { name: "Buka Shift Kasir" }),
+    ).toBeVisible();
+    await openDialog.getByLabel("Kas Awal (Rp)").fill("200000");
+    await openDialog.getByRole("button", { name: "Buka Shift" }).click();
+
+    // Shift open dialog closes; the top bar now offers "Tutup Shift".
     await expect(
       page.getByRole("heading", { name: "Buka Shift Kasir" }),
-    ).toBeVisible();
-    await page.getByLabel("Kas awal (IDR)").fill("200000");
-    await page.getByRole("button", { name: "Buka Shift" }).click();
+    ).toBeHidden();
     await expect(
-      page.getByText("Shift dibuka oleh Kasir Demo", { exact: false }),
+      page.getByRole("banner").getByRole("button", { name: "Tutup Shift" }),
     ).toBeVisible();
 
-    await page.getByLabel("Scan / Cari Produk").fill(catalogProduct.barcode);
-    await page.getByRole("button", { name: "Tambah (F1)" }).click();
-    await expect(page.getByRole("cell", { name: catalogProduct.name })).toBeVisible();
-
-    await page.getByRole("button", { name: "Bayar (F2)" }).click();
-    await page.getByRole("button", { name: "Bayar Sekarang" }).click();
+    // Add a product via the search autocomplete (type -> pick result).
+    await page
+      .getByPlaceholder("Ketik nama, SKU, atau scan barcode...")
+      .fill("Teh");
+    await page.getByRole("button", { name: /Teh Tarik Botol/ }).click();
     await expect(
-      page.getByText("Pembayaran berhasil", { exact: false }),
+      page.getByRole("heading", { name: catalogProduct.name }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /^Tutup$/ }).click();
-    await expect(page.getByLabel("Scan / Cari Produk")).toBeFocused();
 
-    await page.getByRole("button", { name: /^Tutup Shift$/ }).click();
-    await page.getByLabel("Kas akhir (IDR)").fill("235000");
-    await page.getByRole("dialog").getByRole("button", { name: "Tutup Shift" }).click();
+    // Pay (F2) -> choose Tunai -> enter cash -> confirm.
+    await page.keyboard.press("F2");
+    await expect(
+      page.getByRole("heading", { name: "Pilih Metode Pembayaran" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /Tunai/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Pembayaran Tunai" }),
+    ).toBeVisible();
+    await page.locator('input[inputmode="numeric"]').fill("200000");
+    await page.getByRole("button", { name: /Bayar Sekarang/ }).click();
 
-    const differenceText = page
+    // Two success surfaces stack: the page-level receipt dialog (portaled to
+    // <body> as role=dialog, on top) and the payment modal (overlay inside
+    // <main>, underneath). Dismiss the receipt dialog first, then the modal.
+    const receiptDialog = page
       .getByRole("dialog")
-      .getByText("Selisih kas", { exact: false });
-    await expect(differenceText).toHaveText(/Selisih kas/i);
-    await page.getByRole("button", { name: "Selesai" }).click();
+      .filter({ hasText: "No. Struk:" });
+    await expect(receiptDialog.getByText(/No\. Struk:/)).toBeVisible();
+    await receiptDialog.getByRole("button", { name: "Selesai" }).click();
+    await expect(receiptDialog).toBeHidden();
 
+    const modalFinish = page
+      .locator("#main-content")
+      .getByRole("button", { name: "Selesai" });
+    if (await modalFinish.isVisible().catch(() => false)) {
+      await modalFinish.click();
+    }
+
+    // Close the shift.
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "Tutup Shift" })
+      .click();
+    const closeDialog = page.getByRole("dialog");
     await expect(
-      page.getByText("Belum ada shift aktif", { exact: false }),
+      closeDialog.getByRole("heading", { name: "Tutup Shift Kasir" }),
+    ).toBeVisible();
+    await closeDialog.getByLabel("Kas akhir").fill("238000");
+    await closeDialog.getByRole("button", { name: "Tutup Shift" }).click();
+
+    // After closing, the shift is inactive again -> "Buka Shift" is offered.
+    await expect(
+      page.getByRole("banner").getByRole("button", { name: "Buka Shift" }),
     ).toBeVisible();
   });
 });

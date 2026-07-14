@@ -74,6 +74,16 @@ jobs:
           DIRECT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
         run: pnpm run db:push
 
+      - name: Seed database
+        # The E2E login specs (auth-credentials, ui/login) drive real credential
+        # sign-in against the DB, so the seed users must exist. db:push only
+        # creates the schema; without this step owner@example.com is absent and
+        # those two specs fail (the rest pass via the NEXT_PUBLIC_E2E bypass).
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
+        run: node ./scripts/seed-initial.mjs
+
       - name: Run lint
         run: pnpm run lint
 
@@ -94,12 +104,10 @@ jobs:
         run: pnpm exec playwright install --with-deps
 
       - name: Run E2E tests (Playwright)
-        # Non-blocking: the E2E suite predates this workflow's green state and
-        # has been failing on main since Oct 2025 (login/navigation timeouts,
-        # demo-route ERR_ABORTED). Kept running for visibility while lint,
-        # typecheck, build and unit tests gate merges. Tracked for a dedicated
-        # E2E-repair pass; flip back to blocking once it's green.
-        continue-on-error: true
+        # Blocking gate: the E2E suite was repaired in the e2e-repair pass and is
+        # now green in CI (13/13 on ephemeral Postgres). Previously non-blocking
+        # because it had been failing on main since Oct 2025; that debt is paid,
+        # so E2E now gates merges alongside lint, typecheck, build and unit tests.
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}

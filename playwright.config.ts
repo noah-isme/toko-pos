@@ -28,10 +28,17 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
     env: {
-      NEXTAUTH_SECRET: "test-secret",
+      NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "test-secret",
       NEXT_PUBLIC_E2E: "true",
-      DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/postgres",
       NEXTAUTH_URL: `http://127.0.0.1:${PORT}`,
+      // Only forward DATABASE_URL when the environment (e.g. CI) actually sets
+      // it. Locally we must NOT inject a localhost fallback here: keys listed in
+      // webServer.env override the dev server's own .env/.env.local loading, so
+      // a bogus fallback would point auth/tRPC at a non-existent DB and every
+      // real-credential flow (login, shifts, sales) would 401/500.
+      ...(process.env.DATABASE_URL
+        ? { DATABASE_URL: process.env.DATABASE_URL }
+        : {}),
     },
   },
 });

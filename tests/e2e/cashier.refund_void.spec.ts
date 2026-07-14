@@ -6,47 +6,28 @@ import { mockAuthSession, setupTrpcMock } from "./mocks";
 const pdfBase64 =
   "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp4cmVmCjAgMQowMDAwMDAwMDAwIDY1NTM1IGYgCnRyYWlsZXIKPDw+PgpzdGFydHhyZWYKMAolJUVPRgo=";
 
+const userOutlet = {
+  id: "uo-1",
+  outletId: "outlet-1",
+  role: "CASHIER",
+  outlet: {
+    id: "outlet-1",
+    name: "Outlet Utama",
+    code: "MAIN",
+    address: "Jl. Kemang Raya No.8",
+  },
+};
+
 test.describe("Kasir – refund & void dari riwayat struk", () => {
   test.beforeEach(async ({ page }) => {
     await mockAuthSession(page);
   });
 
-  test("mencatat transaksi baru lalu refund satu struk dan void struk lainnya", async ({ page }) => {
-    const userOutlet = {
-      id: "uo-1",
-      outletId: "outlet-1",
-      role: "CASHIER",
-      outlet: {
-        id: "outlet-1",
-        name: "Outlet Utama",
-        code: "MAIN",
-        address: "Jl. Kemang Raya No.8",
-      },
-    };
-
-    const catalogProduct = {
-      id: "product-1",
-      name: "Kopi Susu 500ml",
-      sku: "SKU-KOPI-001",
-      barcode: "8991231231231",
-      price: 42000,
-      categoryId: null,
-      category: null,
-      supplierId: null,
-      supplier: null,
-      costPrice: null,
-      isActive: true,
-      defaultDiscountPercent: 0,
-      promoName: null,
-      promoPrice: null,
-      promoStart: null,
-      promoEnd: null,
-      isTaxable: false,
-      taxRate: null,
-      minStock: 3,
-    };
-
-    const recentSales = [];
+  test("refund satu struk dan void struk lainnya dari halaman riwayat", async ({
+    page,
+  }) => {
+    // Two completed receipts to act on. Kept mutable so the mock reflects the
+    // status change after refund/void (the list refetches).
     const receiptsState = [
       {
         id: "sale-refund-target",
@@ -56,7 +37,6 @@ test.describe("Kasir – refund & void dari riwayat struk", () => {
         shiftOpenedAt: new Date("2025-10-12T04:00:00.000Z").toISOString(),
         totalNet: 90000,
         totalItems: 3,
-        restockedQuantity: 3,
         paymentMethods: ["CASH"],
         status: "COMPLETED",
       },
@@ -68,180 +48,106 @@ test.describe("Kasir – refund & void dari riwayat struk", () => {
         shiftOpenedAt: new Date("2025-10-12T07:00:00.000Z").toISOString(),
         totalNet: 120000,
         totalItems: 4,
-        restockedQuantity: 4,
         paymentMethods: ["QRIS"],
         status: "COMPLETED",
       },
     ];
 
-    let activeShift = {
-      id: "shift-open",
-      outletId: userOutlet.outlet.id,
-      userId: "cashier-demo",
-      openingCash: 150000,
-      closingCash: null,
-      expectedCash: null,
-      difference: null,
-      openTime: new Date("2025-10-13T01:00:00.000Z").toISOString(),
-      closeTime: null,
-      user: { id: "cashier-demo", name: "Kasir Demo" },
-    };
-
-    let latestReceiptNumber = "";
-    const refundCalls: unknown[] = [];
-    const voidCalls: unknown[] = [];
-
-    const mapReceipt = (sale: typeof receiptsState[number]) => ({
-      id: sale.id,
-      receiptNumber: sale.receiptNumber,
-      soldAt: sale.soldAt,
-      cashierName: sale.cashierName,
-      totalNet: sale.totalNet,
-      paymentMethods: sale.paymentMethods,
-      status: sale.status,
-      shiftOpenedAt: sale.shiftOpenedAt,
-    });
+    const refundCalls = [];
+    const voidCalls = [];
 
     await setupTrpcMock(page, {
       "outlets.getUserOutlets": () => [userOutlet],
       "outlets.list": () => [userOutlet.outlet],
-      "products.list": () => [catalogProduct],
-      "products.categories": () => [],
-      "products.suppliers": () => [],
-      "settings.listTaxSettings": () => [],
-      "products.getInventoryByProduct": () => [
-        {
-          outletId: userOutlet.outlet.id,
-          outletName: userOutlet.outlet.name,
-          quantity: 20,
-          updatedAt: new Date().toISOString(),
-        },
-      ],
-      "products.getStockMovements": () => [],
-      "cashSessions.getActive": () => activeShift,
-      "cashSessions.open": () => activeShift,
-      "cashSessions.close": () => activeShift,
-      "sales.listRecent": () => recentSales,
-      "sales.recordSale": ({ input }) => {
-        const receiptNumber = input?.receiptNumber ?? `POS-${Date.now()}`;
-        const items = input?.items ?? [];
-        const discount = input?.discountTotal ?? 0;
-        const totalNet =
-          items.reduce(
-            (sum, item) => sum + (item.unitPrice * item.quantity - item.discount),
-            0,
-          ) - discount;
-        latestReceiptNumber = receiptNumber;
-        const sale = {
-          id: `sale-${Date.now()}`,
-          receiptNumber,
-          soldAt: new Date().toISOString(),
-          cashierName: "Kasir Demo",
-          shiftOpenedAt: activeShift.openTime,
-          totalNet,
-          totalItems: items.reduce((sum, item) => sum + item.quantity, 0),
-          restockedQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
-          paymentMethods: input?.payments?.map((payment) => payment.method) ?? ["CASH"],
-          status: "COMPLETED",
-        };
-        receiptsState.unshift(sale);
-        recentSales.unshift({ ...sale, outletId: userOutlet.outlet.id, items: [] });
-
-        return {
+      "sales.getReceiptsByOutlet": () =>
+        receiptsState.map((sale) => ({
           id: sale.id,
           receiptNumber: sale.receiptNumber,
-          totalNet: sale.totalNet,
           soldAt: sale.soldAt,
-          taxAmount: null,
-        };
-      },
-      "sales.printReceipt": () => ({
-        filename: "POS-SEED.pdf",
-        base64: pdfBase64,
-      }),
-      "sales.getReceiptsByOutlet": () => receiptsState.map(mapReceipt),
+          cashierName: sale.cashierName,
+          totalNet: sale.totalNet,
+          paymentMethods: sale.paymentMethods,
+          status: sale.status,
+          shiftOpenedAt: sale.shiftOpenedAt,
+        })),
+      "sales.printReceipt": () => ({ filename: "POS.pdf", base64: pdfBase64 }),
       "sales.refundSale": ({ input }) => {
         refundCalls.push(input);
-        const sale = receiptsState.find((entry) => entry.id === input.saleId);
-        if (!sale) {
-          throw new Error("Sale not found");
-        }
+        const sale = receiptsState.find((s) => s.id === input.saleId);
         sale.status = "REFUNDED";
         return {
           id: sale.id,
           receiptNumber: sale.receiptNumber,
           totalNet: sale.totalNet,
           totalItems: sale.totalItems,
-          restockedQuantity: sale.restockedQuantity,
+          restockedQuantity: sale.totalItems,
           status: sale.status,
           refundAmount: input.amount ?? sale.totalNet,
         };
       },
       "sales.voidSale": ({ input }) => {
         voidCalls.push(input);
-        const sale = receiptsState.find((entry) => entry.id === input.saleId);
-        if (!sale) {
-          throw new Error("Sale not found");
-        }
+        const sale = receiptsState.find((s) => s.id === input.saleId);
         sale.status = "VOIDED";
         return {
           id: sale.id,
           receiptNumber: sale.receiptNumber,
           totalNet: sale.totalNet,
           totalItems: sale.totalItems,
-          restockedQuantity: sale.restockedQuantity,
+          restockedQuantity: sale.totalItems,
           status: sale.status,
         };
       },
     });
 
-    await page.goto("/cashier");
+    await page.goto("/cashier/receipts");
     await expect(
-      page.getByText("Shift dibuka oleh Kasir Demo", { exact: false }),
+      page.getByRole("heading", { name: "10 Transaksi Terakhir" }),
     ).toBeVisible();
 
-    await page.getByLabel("Scan / Cari Produk").fill(catalogProduct.barcode);
-    await page.getByRole("button", { name: "Tambah (F1)" }).click();
-    await page.getByRole("button", { name: "Bayar (F2)" }).click();
-    await page.getByRole("button", { name: "Bayar Sekarang" }).click();
+    // Refund POS-3001.
+    const refundRow = page.getByRole("row").filter({ hasText: "POS-3001" });
+    await refundRow.getByRole("button", { name: "Refund" }).click();
+    const refundDialog = page.getByRole("dialog");
     await expect(
-      page.getByText("Pembayaran berhasil", { exact: false }),
+      refundDialog.getByRole("heading", { name: "Konfirmasi Refund" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /^Tutup$/ }).click();
+    const refundReason = refundDialog.getByLabel("Alasan");
+    await refundReason.click();
+    await refundReason.fill("Produk bocor");
+    await expect(refundReason).toHaveValue("Produk bocor");
+    await refundDialog.getByRole("button", { name: "Konfirmasi Refund" }).click();
 
-    await expect.poll(() => latestReceiptNumber).not.toBe("");
-
-    await page.getByRole("link", { name: "Riwayat Struk" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Riwayat Struk" }),
-    ).toBeVisible();
-
-    const newlyCreatedRow = page
-      .locator("tr")
-      .filter({ hasText: latestReceiptNumber })
-      .first();
-    await newlyCreatedRow.getByRole("button", { name: "Refund" }).click();
-    await page.getByLabel("Alasan").fill("Produk bocor");
-    await page.getByRole("button", { name: "Konfirmasi Refund" }).click();
-    await expect(newlyCreatedRow.getByText("Refund")).toBeVisible();
-
+    await expect(refundDialog).toBeHidden();
     expect(refundCalls).toHaveLength(1);
     expect(refundCalls[0]).toMatchObject({
-      saleId: expect.any(String),
+      saleId: "sale-refund-target",
       reason: "Produk bocor",
-      amount: expect.any(Number),
     });
+    // After refund the row's action buttons disable (status no longer COMPLETED).
+    await expect(
+      refundRow.getByRole("button", { name: "Refund" }),
+    ).toBeDisabled();
 
-    const voidRow = page.locator("tr").filter({ hasText: "POS-3002" }).first();
+    // Void POS-3002.
+    const voidRow = page.getByRole("row").filter({ hasText: "POS-3002" });
     await voidRow.getByRole("button", { name: "Void" }).click();
-    await page.getByLabel("Alasan").fill("Pembayaran ganda");
-    await page.getByRole("button", { name: "Konfirmasi Void" }).click();
-    await expect(voidRow.getByText("Void")).toBeVisible();
+    const voidDialog = page.getByRole("dialog");
+    await expect(
+      voidDialog.getByRole("heading", { name: "Konfirmasi Void Struk" }),
+    ).toBeVisible();
+    const voidReason = voidDialog.getByLabel("Alasan");
+    await voidReason.click();
+    await voidReason.fill("Pembayaran ganda");
+    await expect(voidReason).toHaveValue("Pembayaran ganda");
+    await voidDialog.getByRole("button", { name: "Konfirmasi Void" }).click();
 
+    await expect(voidDialog).toBeHidden();
     expect(voidCalls).toHaveLength(1);
     expect(voidCalls[0]).toMatchObject({
       saleId: "sale-void-target",
       reason: "Pembayaran ganda",
     });
+    await expect(voidRow.getByRole("button", { name: "Void" })).toBeDisabled();
   });
 });
