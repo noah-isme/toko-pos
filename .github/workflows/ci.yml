@@ -74,6 +74,16 @@ jobs:
           DIRECT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
         run: pnpm run db:push
 
+      - name: Seed database
+        # The E2E login specs (auth-credentials, ui/login) drive real credential
+        # sign-in against the DB, so the seed users must exist. db:push only
+        # creates the schema; without this step owner@example.com is absent and
+        # those two specs fail (the rest pass via the NEXT_PUBLIC_E2E bypass).
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
+        run: node ./scripts/seed-initial.mjs
+
       - name: Run lint
         run: pnpm run lint
 
