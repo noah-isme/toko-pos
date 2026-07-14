@@ -94,12 +94,10 @@ jobs:
         run: pnpm exec playwright install --with-deps
 
       - name: Run E2E tests (Playwright)
-        # Non-blocking: the E2E suite predates this workflow's green state and
-        # has been failing on main since Oct 2025 (login/navigation timeouts,
-        # demo-route ERR_ABORTED). Kept running for visibility while lint,
-        # typecheck, build and unit tests gate merges. Tracked for a dedicated
-        # E2E-repair pass; flip back to blocking once it's green.
-        continue-on-error: true
+        # Blocking gate: the E2E suite was repaired in the e2e-repair pass and is
+        # now green in CI (13/13 on ephemeral Postgres). Previously non-blocking
+        # because it had been failing on main since Oct 2025; that debt is paid,
+        # so E2E now gates merges alongside lint, typecheck, build and unit tests.
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
