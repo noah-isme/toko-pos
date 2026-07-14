@@ -21,24 +21,26 @@ test.describe("Demo routes", () => {
       page.getByRole("cell", { name: "Almond Milk 1L" }),
     ).toBeVisible();
 
-    await page.goto("/demo/reports");
-    await expect(page.locator("main h1")).toContainText("Laporan Harian");
+    // In dev the server can abort the first in-flight navigation while Turbopack
+    // compiles the route (net::ERR_ABORTED). Retry the goto a few times until the
+    // page commits, then assert content.
+    await expect(async () => {
+      await page.goto("/demo/reports", { waitUntil: "commit" });
+      await expect(page.locator("main h1")).toContainText("Laporan Harian", {
+        timeout: 10000,
+      });
+    }).toPass({ timeout: 40000 });
     await expect(page.getByText("Total Transaksi")).toBeVisible();
     await expect(page.getByText("Forecast Float Kasir")).toBeVisible();
   });
 });
 
-test.describe("Payment dialog flow", () => {
-  const outlets = [
-    { id: "outlet-1", name: "Outlet Pusat", code: "OP", address: "Jl. Utama" },
-  ];
-
-  const product = {
-    id: "product-1",
-    name: "Kopi Botol 250ml",
-    sku: "SKU-01",
-    price: 18000,
-    barcode: "8999991234567",
+test.describe("Receipt reprint", () => {
+  const userOutlet = {
+    id: "uo-1",
+    outletId: "outlet-1",
+    role: "CASHIER",
+    outlet: { id: "outlet-1", name: "Outlet Pusat", code: "OP", address: "Jl. Utama" },
   };
 
   test.beforeEach(async ({ page }) => {
@@ -52,105 +54,44 @@ test.describe("Payment dialog flow", () => {
     });
   });
 
-  test("shows receipt preview, allows download & print actions", async ({ page }) => {
-    const recordSaleCalls: unknown[] = [];
+  test("reprints a receipt PDF from the history page", async ({ page }) => {
     const printReceiptCalls: unknown[] = [];
 
     await setupTrpcMock(page, {
-      "outlets.list": () => outlets,
-      "products.list": () => [
+      "outlets.getUserOutlets": () => [userOutlet],
+      "outlets.list": () => [userOutlet.outlet],
+      "sales.getReceiptsByOutlet": () => [
         {
-          id: product.id,
-          name: product.name,
-          sku: product.sku,
-          barcode: product.barcode,
-          price: product.price,
-          categoryId: null,
-          category: null,
-          supplierId: null,
-          supplier: null,
-          costPrice: null,
-          isActive: true,
-          defaultDiscountPercent: null,
-          promoName: null,
-          promoPrice: null,
-          promoStart: null,
-          promoEnd: null,
-          isTaxable: false,
-          taxRate: null,
+          id: "sale-1",
+          receiptNumber: "POS-0003",
+          soldAt: new Date("2025-10-12T05:00:00.000Z").toISOString(),
+          cashierName: "Kasir Demo",
+          totalNet: 18000,
+          paymentMethods: ["CASH"],
+          status: "COMPLETED",
+          shiftOpenedAt: new Date("2025-10-12T04:00:00.000Z").toISOString(),
         },
       ],
-      "products.getByBarcode": ({ input }) => {
-        const barcode = (input as { barcode?: string } | undefined)?.barcode;
-        if (barcode === product.barcode) {
-          return {
-            id: product.id,
-            name: product.name,
-            sku: product.sku,
-            price: product.price,
-          };
-        }
-        return null;
-      },
-      "sales.recordSale": ({ input }) => {
-        recordSaleCalls.push(input);
-        return {
-          id: "sale-789",
-          receiptNumber: "POS-0003",
-          totalNet: product.price,
-          soldAt: new Date().toISOString(),
-          taxAmount: null,
-        };
-      },
       "sales.printReceipt": ({ input }) => {
         printReceiptCalls.push(input);
-        return {
-          filename: "POS-0003.pdf",
-          base64: pdfBase64,
-        };
+        return { filename: "POS-0003.pdf", base64: pdfBase64 };
       },
     });
 
-    await page.goto("/cashier");
-    await expect(page.locator("main h1")).toContainText("Outlet");
+    await page.goto("/cashier/receipts");
+    const row = page.getByRole("row").filter({ hasText: "POS-0003" });
+    await expect(row).toBeVisible();
 
-    await page.fill("#barcode", product.barcode);
-    await page.getByRole("button", { name: "Tambah (F1)" }).click();
+    await row.getByRole("button", { name: "Cetak Ulang" }).click();
 
-    await expect(
-      page.getByRole("cell", { name: product.name }),
-    ).toBeVisible();
+    // The reprint calls sales.printReceipt and opens the PDF via window.open.
+    await expect.poll(() => printReceiptCalls.length).toBe(1);
+    expect(printReceiptCalls[0]).toMatchObject({ saleId: "sale-1" });
 
-    await page.getByRole("button", { name: "Tinjau Pembayaran (F2)" }).click();
-
-    await expect(
-      page.getByRole("heading", { name: "Konfirmasi Pembayaran" }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Preview Struk"),
-    ).toBeVisible();
-
-    await page.getByRole("button", { name: "Proses Pembayaran" }).click();
-
-    await expect(
-      page.getByText("Pembayaran berhasil. Pilih tindakan untuk struk."),
-    ).toBeVisible();
-
-    await expect(
-      page.getByRole("button", { name: "Unduh PDF" }),
-    ).toBeEnabled();
-
-    expect(recordSaleCalls).toHaveLength(1);
-    expect(printReceiptCalls).toHaveLength(1);
-
-    const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Unduh PDF" }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename().startsWith("POS-")).toBe(true);
-
-    await page.getByRole("button", { name: "Cetak langsung" }).click();
     const receiptUrl = await page.evaluate<string | undefined>(
-      () => (window as typeof window & { __lastReceiptUrl?: string }).__lastReceiptUrl,
+      () =>
+        (window as typeof window & { __lastReceiptUrl?: string })
+          .__lastReceiptUrl,
     );
     expect(receiptUrl).toBeTruthy();
   });

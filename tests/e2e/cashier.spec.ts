@@ -3,159 +3,135 @@ import { expect, test } from "@playwright/test";
 
 import { mockAuthSession, setupTrpcMock } from "./mocks";
 
-const pdfBase64 =
-  "JVBERi0xLjQKMSAwIG9iago8PD4+CmVuZG9iagp4cmVmCjAgMQowMDAwMDAwMDAwIDY1NTM1IGYgCnRyYWlsZXIKPDw+PgpzdGFydHhyZWYKMAolJUVPRgo=";
-
-const outlets = [
-  { id: "outlet-1", name: "Outlet Pusat", code: "OP", address: "Jl. Utama" },
-];
+const userOutlet = {
+  id: "uo-1",
+  outletId: "outlet-1",
+  role: "CASHIER",
+  outlet: { id: "outlet-1", name: "Outlet Pusat", code: "OP", address: "Jl. Utama" },
+};
 
 const product = {
   id: "product-1",
   name: "Kopi Botol 250ml",
   sku: "SKU-01",
+  barcode: "8999991234567",
   price: 15000,
+  categoryName: null,
 };
+
+// A shift that is already active, so the cashier page doesn't prompt to open one.
+const activeShift = {
+  id: "shift-1",
+  outletId: "outlet-1",
+  userId: "cashier-demo",
+  openingCash: 100000,
+  closingCash: null,
+  expectedCash: null,
+  difference: null,
+  openTime: new Date("2025-10-13T01:00:00.000Z").toISOString(),
+  closeTime: null,
+  user: { id: "cashier-demo", name: "Kasir Demo" },
+};
+
+const baseHandlers = (recordSaleCalls) => ({
+  "outlets.getUserOutlets": () => [userOutlet],
+  "outlets.list": () => [userOutlet.outlet],
+  "products.list": () => [product],
+  "products.searchProducts": ({ input }) => {
+    const q = String(input?.query ?? "").toLowerCase();
+    return [product].filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.barcode ?? "").includes(q),
+    );
+  },
+  "promotions.list": () => [],
+  "tasks.getCashierTasks": () => ({ tasks: [], alerts: [], shiftActive: true }),
+  "sales.listRecent": () => [],
+  "cashSessions.getActive": ({ input }) =>
+    input?.outletId === activeShift.outletId ? activeShift : null,
+  "sales.recordSale": ({ input }) => {
+    recordSaleCalls.push(input);
+    return {
+      id: "sale-123",
+      receiptNumber: "TRX-0001",
+      totalNet: product.price,
+      soldAt: new Date().toISOString(),
+      taxAmount: null,
+      promotionDiscount: 0,
+      promotions: [],
+    };
+  },
+});
 
 test.beforeEach(async ({ page }) => {
   await mockAuthSession(page);
   await page.addInitScript(() => {
-    window.open = (url: string | URL | undefined | null) => {
-      (window as typeof window & { __lastReceiptUrl?: string }).__lastReceiptUrl =
-        typeof url === "string" ? url : url?.toString();
-      return null;
-    };
+    window.localStorage.setItem("cashier-quick-mode", "false");
   });
 });
 
 test.describe("Kasir", () => {
-  test("dapat menyelesaikan transaksi tunai dan mencetak struk", async ({ page }) => {
-    const recordSaleCalls: unknown[] = [];
-    const printReceiptCalls: unknown[] = [];
-
-    await setupTrpcMock(page, {
-      "outlets.list": () => outlets,
-      "products.getByBarcode": ({ input }) => {
-        const barcode = (input as { barcode?: string } | undefined)?.barcode;
-        if (!barcode) {
-          return null;
-        }
-        if (barcode === "8999991234567") {
-          return product;
-        }
-        return null;
-      },
-      "sales.recordSale": ({ input }) => {
-        recordSaleCalls.push(input);
-        return {
-          id: "sale-123",
-          receiptNumber: "POS-0001",
-          totalNet: product.price,
-          soldAt: new Date().toISOString(),
-          taxAmount: null,
-        };
-      },
-      "sales.printReceipt": ({ input }) => {
-        printReceiptCalls.push(input);
-        return {
-          filename: "POS-0001.pdf",
-          base64: pdfBase64,
-        };
-      },
-    });
+  test("records a cash sale with the correct payload", async ({ page }) => {
+    const recordSaleCalls = [];
+    await setupTrpcMock(page, baseHandlers(recordSaleCalls));
 
     await page.goto("/cashier");
-    await expect(page.getByRole("heading", { name: "Modul Kasir" })).toBeVisible();
 
-    await page.getByLabel("Barcode").fill("8999991234567");
-    await page.getByRole("button", { name: "Tambah" }).click();
+    // Add the product via the search autocomplete.
+    await page
+      .getByPlaceholder("Ketik nama, SKU, atau scan barcode...")
+      .fill("Kopi");
+    await page.getByRole("button", { name: /Kopi Botol 250ml/ }).click();
+    await expect(page.getByRole("heading", { name: product.name })).toBeVisible();
 
-    await expect(page.getByRole("cell", { name: product.name })).toBeVisible();
+    // Pay with cash.
+    await page.keyboard.press("F2");
+    await page.getByRole("button", { name: /Tunai/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Pembayaran Tunai" }),
+    ).toBeVisible();
+    await page.locator('input[inputmode="numeric"]').fill("20000");
+    await page.getByRole("button", { name: /Bayar Sekarang/ }).click();
 
-    await page.getByRole("button", { name: "Selesaikan & Cetak Struk" }).click();
+    await expect(
+      page.getByRole("dialog").filter({ hasText: "No. Struk:" }).getByText(/No\. Struk:/),
+    ).toBeVisible();
 
-    await expect(page.getByText("Transaksi tersimpan")).toBeVisible();
-    await expect(page.getByText("Pembayaran: Tunai")).toBeVisible();
-
+    // Verify the sale payload the cashier sent to the server.
     expect(recordSaleCalls).toHaveLength(1);
-    const salePayload = recordSaleCalls[0] as {
-      payments: Array<{ method: string; reference?: string; amount: number }>;
-      items: Array<{ productId: string; quantity: number }>;
-    };
-    expect(salePayload.items[0]?.productId).toBe(product.id);
-    expect(salePayload.payments[0]?.method).toBe("CASH");
-    expect(salePayload.payments[0]?.reference).toBeUndefined();
-
-    expect(printReceiptCalls).toHaveLength(1);
-    const receiptPayload = printReceiptCalls[0] as { saleId: string };
-    expect(receiptPayload.saleId).toBe("sale-123");
-
-    const receiptUrl = await page.evaluate<string | undefined>(
-      () => (window as typeof window & { __lastReceiptUrl?: string }).__lastReceiptUrl,
-    );
-    expect(receiptUrl).toBeTruthy();
+    const payload = recordSaleCalls[0];
+    expect(payload.outletId).toBe("outlet-1");
+    expect(payload.items).toHaveLength(1);
+    expect(payload.items[0].productId).toBe(product.id);
+    expect(payload.items[0].quantity).toBe(1);
+    expect(payload.payments[0].method).toBe("CASH");
   });
 
-  test("memvalidasi referensi non-tunai dan mengirim metode pembayaran dummy", async ({ page }) => {
-    const recordSaleCalls: unknown[] = [];
-    const printReceiptCalls: unknown[] = [];
-
-    await setupTrpcMock(page, {
-      "outlets.list": () => outlets,
-      "products.getByBarcode": ({ input }) => {
-        const barcode = (input as { barcode?: string } | undefined)?.barcode;
-        if (barcode === "8999991234567") {
-          return product;
-        }
-        return null;
-      },
-      "sales.recordSale": ({ input }) => {
-        recordSaleCalls.push(input);
-        return {
-          id: "sale-456",
-          receiptNumber: "POS-0002",
-          totalNet: product.price,
-          soldAt: new Date().toISOString(),
-          taxAmount: null,
-        };
-      },
-      "sales.printReceipt": ({ input }) => {
-        printReceiptCalls.push(input);
-        return {
-          filename: "POS-0002.pdf",
-          base64: pdfBase64,
-        };
-      },
-    });
+  test("QRIS selection reaches the QRIS payment screen", async ({ page }) => {
+    const recordSaleCalls = [];
+    await setupTrpcMock(page, baseHandlers(recordSaleCalls));
 
     await page.goto("/cashier");
-    await page.getByRole("button", { name: "Non-Tunai Dummy" }).click();
-  await page.getByRole("button", { name: "Selesaikan & Cetak Struk" }).click();
 
-  // The UI shows a reference input for non-cash payments; assert the input/placeholder is visible
-  await expect(page.getByPlaceholder("Masukkan referensi pembayaran")).toBeVisible();
+    await page
+      .getByPlaceholder("Ketik nama, SKU, atau scan barcode...")
+      .fill("Kopi");
+    await page.getByRole("button", { name: /Kopi Botol 250ml/ }).click();
+    await expect(page.getByRole("heading", { name: product.name })).toBeVisible();
+
+    await page.keyboard.press("F2");
+    await expect(
+      page.getByRole("heading", { name: "Pilih Metode Pembayaran" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /QRIS/ }).click();
+
+    // QRIS completion is simulated/nondeterministic; we only assert the branch
+    // renders its own screen. No sale is recorded until it "succeeds".
+    await expect(
+      page.getByRole("heading", { name: "Pembayaran QRIS" }),
+    ).toBeVisible();
     expect(recordSaleCalls).toHaveLength(0);
-
-    await page.getByLabel("Barcode").fill("8999991234567");
-    await page.getByPlaceholder("Masukkan referensi pembayaran").fill("INV-123");
-    await page.getByRole("button", { name: "Tambah" }).click();
-
-    await expect(page.getByRole("cell", { name: product.name })).toBeVisible();
-
-    await page.getByRole("button", { name: "Selesaikan & Cetak Struk" }).click();
-
-  await expect(page.getByText("Transaksi tersimpan")).toBeVisible();
-
-  // Ensure the backend recorded the sale with non-cash method via our mock
-  expect(recordSaleCalls).toHaveLength(1);
-    const nonCashPayload = recordSaleCalls[0] as {
-      payments: Array<{ method: string; reference?: string }>;
-    };
-    expect(nonCashPayload.payments[0]?.method).toBe("QRIS");
-    expect(nonCashPayload.payments[0]?.reference).toBe("INV-123");
-
-    expect(printReceiptCalls).toHaveLength(1);
-    const receiptPayload = printReceiptCalls[0] as { saleId: string };
-    expect(receiptPayload.saleId).toBe("sale-456");
   });
 });
