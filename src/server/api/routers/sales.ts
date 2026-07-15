@@ -614,55 +614,54 @@ export const salesRouter = router({
             }),
           );
 
+          return createdSale;
+        });
+
+        // FASE DERIVATIF SESUDAH COMMIT (Post-Commit)
+        try {
           const lowStockResults = await Promise.all(
             Array.from(affectedKeys).map((key) => {
               const [productId, outletId] = key.split(":");
-              return evaluateLowStock(
-                {
-                  productId,
-                  outletId,
-                },
-                tx,
-              );
+              return evaluateLowStock({
+                productId,
+                outletId,
+              });
             }),
           );
 
           for (const result of lowStockResults) {
             if (result && result.status === "triggered") {
               const alert = result.alert;
-              await writeAuditLog(
-                {
-                  action: "LOW_STOCK_TRIGGER",
-                  userId: ctx.session?.user.id,
-                  outletId: alert.outletId,
-                  entity: "LOW_STOCK_ALERT",
-                  entityId: alert.id,
-                  details: {
-                    productId: alert.productId,
-                  },
+              await writeAuditLog({
+                action: "LOW_STOCK_TRIGGER",
+                userId: ctx.session?.user.id,
+                outletId: alert.outletId,
+                entity: "LOW_STOCK_ALERT",
+                entityId: alert.id,
+                details: {
+                  productId: alert.productId,
                 },
-                tx,
-              );
+              });
             }
           }
 
-          await writeAuditLog(
-            {
-              action: "SALE_RECORD",
-              userId: ctx.session?.user.id,
-              outletId: input.outletId,
-              entity: "SALE",
-              entityId: createdSale.id,
-              details: {
-                receiptNumber: createdSale.receiptNumber,
-                totalNet: Number(createdSale.totalNet),
-              },
+          await writeAuditLog({
+            action: "SALE_RECORD",
+            userId: ctx.session?.user.id,
+            outletId: input.outletId,
+            entity: "SALE",
+            entityId: sale.id,
+            details: {
+              receiptNumber: sale.receiptNumber,
+              totalNet: Number(sale.totalNet),
             },
-            tx,
+          });
+        } catch (postCommitError) {
+          console.error(
+            "Error in post-commit phase (low stock / audit log):",
+            postCommitError,
           );
-
-          return createdSale;
-        });
+        }
 
         return recordSaleOutputSchema.parse({
           id: sale.id,

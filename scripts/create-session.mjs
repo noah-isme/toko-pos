@@ -1,6 +1,33 @@
 #!/usr/bin/env node
 import { PrismaClient } from '@prisma/client';
-import crypto from 'crypto';
+import { encode } from 'next-auth/jwt';
+import fs from 'fs';
+import path from 'path';
+
+// Load environment variables matching Next.js priorities
+function loadEnv() {
+  const envFiles = ['.env.local', '.env'];
+  for (const file of envFiles) {
+    const dotenvPath = path.resolve(process.cwd(), file);
+    if (fs.existsSync(dotenvPath)) {
+      const content = fs.readFileSync(dotenvPath, 'utf8');
+      for (const line of content.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) continue;
+        const key = trimmed.slice(0, eq).trim();
+        let value = trimmed.slice(eq + 1).trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        if (!process.env[key]) process.env[key] = value;
+      }
+    }
+  }
+}
+
+loadEnv();
 
 const prisma = new PrismaClient();
 
@@ -11,25 +38,32 @@ async function main() {
     process.exit(1);
   }
 
-  const sessionToken = crypto.randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    console.error('NEXTAUTH_SECRET is not set in environment or env files.');
+    process.exit(1);
+  }
 
-  const session = await prisma.session.create({
-    data: {
-      sessionToken,
-      userId: user.id,
-      expires,
+  // Generate NextAuth JWT token
+  const token = await encode({
+    secret,
+    token: {
+      sub: user.id,
+      name: user.name ?? undefined,
+      email: user.email ?? undefined,
+      role: user.role,
     },
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   });
 
-  console.log('✅ Created session for user:', user.email);
-  console.log('sessionToken:', sessionToken);
-  console.log('Set this cookie in your browser for domain localhost:');
+  console.log('✅ Generated JWT session for user:', user.email);
+  console.log('sessionToken:', token);
+  console.log('\nSet this cookie in your browser for domain localhost:');
   console.log(`Name: next-auth.session-token`);
-  console.log(`Value: ${sessionToken}`);
+  console.log(`Value: ${token}`);
   console.log('Path: /');
-  console.log('Example curl to call protected endpoint with cookie:');
-  console.log(`curl -v --cookie "next-auth.session-token=${sessionToken}" "http://localhost:3000/api/trpc/products.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22search%22%3A%22%22%7D%7D%7D"`);
+  console.log('\nExample curl to call protected endpoint with cookie:');
+  console.log(`curl -v --cookie "next-auth.session-token=${token}" "http://localhost:5000/api/trpc/products.list?batch=1&input=%7B%220%22%3A%7B%22json%22%3A%7B%22search%22%3A%22%22%7D%7D%7D"`);
 
   await prisma.$disconnect();
 }
