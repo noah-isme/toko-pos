@@ -2,6 +2,14 @@
 
 Toko POS adalah implementasi sistem Point of Sale retail berbasis Next.js (App Router) dengan TypeScript, tRPC, Prisma, dan Supabase. Proyek ini menyiapkan fondasi MVP lengkap untuk modul kasir, manajemen produk, otentikasi role, pencetakan struk PDF, dan laporan penjualan harian.
 
+## Preview Admin
+
+Visual berikut dihasilkan oleh Playwright menggunakan sesi NextAuth
+`admin@example.com` dengan role `ADMIN`. Identitas dan data operasional dibuat
+deterministik agar baseline tetap stabil di lingkungan lokal dan CI.
+
+![Dashboard admin Toko POS](./tests/e2e/visual/__screenshots__/admin-dashboard.png)
+
 ## Stack Utama
 
 - **Frontend & API**: Next.js App Router + TypeScript, tRPC, TanStack Query, Tailwind CSS 4, shadcn/ui.
@@ -170,6 +178,16 @@ pnpm exec playwright test --project=chromium
 Notes:
 - CI already runs the Playwright browser install step before executing tests. If you add or change Playwright versions, re-run the install command.
 - If your environment blocks downloads, install only chromium with `pnpm exec playwright install chromium`.
+
+Visual regression memakai sesi NextAuth admin dan tidak bergantung pada data
+demo atau database eksternal. Jalankan:
+
+```bash
+pnpm run test:e2e:visual
+
+# Perbarui baseline setelah perubahan UI yang disengaja
+pnpm run test:e2e:visual:update
+```
 
 
 ## Deploy
