@@ -1,4 +1,6 @@
 import { db } from '@/server/db';
+import { env } from '@/env';
+import { encode } from 'next-auth/jwt';
 
 export async function GET(req: Request) {
   // Only allow in non-production
@@ -19,15 +21,21 @@ export async function GET(req: Request) {
   const user = await db.user.findUnique({ where: { email } });
   if (!user) return new Response('User not found', { status: 404 });
 
-  const crypto = await import('crypto');
-  const sessionToken = crypto.randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  // Generate NextAuth JWT token
+  const token = await encode({
+    secret: env.NEXTAUTH_SECRET,
+    token: {
+      sub: user.id,
+      name: user.name ?? undefined,
+      email: user.email ?? undefined,
+      role: user.role,
+    },
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  });
 
-  await db.session.create({ data: { sessionToken, userId: user.id, expires } });
-
-  // Set cookie compatible with next-auth database sessions on localhost (dev-only)
+  // Set cookie compatible with next-auth JWT sessions on localhost (dev-only)
   const maxAge = 30 * 24 * 60 * 60;
-  const cookie = `next-auth.session-token=${sessionToken}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
+  const cookie = `next-auth.session-token=${token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
 
   return new Response(null, {
     status: 302,
