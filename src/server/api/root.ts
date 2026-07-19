@@ -8,6 +8,7 @@ import { inventoryRouter } from "@/server/api/routers/inventory";
 import { analyticsRouter } from "@/server/api/routers/analytics";
 import { promotionsRouter } from "@/server/api/routers/promotions";
 import { tasksRouter } from "@/server/api/routers/tasks";
+import { usersRouter } from "@/server/api/routers/users";
 
 export const appRouter = router({
   sales: salesRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   promotions: promotionsRouter,
   tasks: tasksRouter,
+  users: usersRouter,
 });
 
 export type AppRouter = typeof appRouter;

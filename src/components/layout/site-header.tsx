@@ -2,18 +2,19 @@
 
 import React from "react";
 import Link from "next/link";
-import { 
-  LogIn, 
-  LogOut, 
-  Menu, 
-  Search, 
-  Bell, 
-  Settings, 
+import {
+  LogIn,
+  LogOut,
+  Menu,
+  Search,
+  Bell,
+  Settings,
   HelpCircle,
   ChevronDown,
   Clock,
   CircleDot,
   User,
+  Users,
   Building2,
   LayoutDashboard,
   Receipt,
@@ -329,6 +330,15 @@ export function SiteHeader({ className }: { className?: string }) {
                   <Settings className="mr-2 h-4 w-4" />
                   Pengaturan
                 </DropdownMenuItem>
+                {(session?.user?.role === "OWNER" ||
+                  session?.user?.role === "ADMIN") && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/management/users">
+                      <Users className="mr-2 h-4 w-4" />
+                      Manajemen User
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {
