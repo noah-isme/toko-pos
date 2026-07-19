@@ -81,7 +81,8 @@ export async function GET(
       isTaxable: product.isTaxable,
       taxRate: product.taxRate ? Number(product.taxRate) : null,
       taxId: product.taxRate ? product.taxRate.toString() : null,
-      image: null, // TODO: Add image support
+      image: product.imageUrl,
+      imageUrl: product.imageUrl,
       status: product.isActive ? "active" : "inactive",
       unit: "", // Add unit field
       tags: [], // Add tags field
@@ -172,6 +173,7 @@ export async function PUT(
         name: body.name,
         sku: body.sku,
         barcode: body.barcode || null,
+        imageUrl: body.imageUrl ?? body.image ?? null,
         description: body.description || null,
         price: body.sellingPrice
           ? new Prisma.Decimal(body.sellingPrice)

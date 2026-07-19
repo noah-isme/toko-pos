@@ -16,6 +16,7 @@ export const productSummarySchema = z.object({
   name: z.string(),
   sku: z.string(),
   barcode: z.string().nullable(),
+  imageUrl: z.string().nullable(),
   price: z.number(),
   categoryId: z.string().nullable(),
   category: z.string().nullable(),
@@ -56,6 +57,11 @@ export const productUpsertInputSchema = z.object({
     .string()
     .min(6, { message: "Barcode minimal 6 karakter" })
     .max(64, { message: "Barcode maksimal 64 karakter" })
+    .optional(),
+  imageUrl: z
+    .string()
+    .url({ message: "URL gambar tidak valid" })
+    .or(z.literal(""))
     .optional(),
   description: z.string().max(500).optional(),
   price: z.number().min(0, { message: "Harga tidak boleh negatif" }),

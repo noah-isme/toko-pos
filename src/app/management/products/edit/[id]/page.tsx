@@ -37,6 +37,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ProductImageUpload } from "@/components/products/product-image-upload";
+import { BarcodeField } from "@/components/products/barcode-field";
 
 interface OutletStock {
   outletId: string;
@@ -481,13 +483,10 @@ export default function EditProductPage() {
 
                 <div>
                   <Label>Gambar</Label>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center hover:bg-gray-50 cursor-pointer">
-                    <Plus className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-600">
-                      Upload atau Drag & Drop
-                    </p>
-                    <p className="text-xs text-gray-400">PNG, JPG hingga 5MB</p>
-                  </div>
+                  <ProductImageUpload
+                    value={formData.image}
+                    onChange={(url) => handleInputChange("image", url)}
+                  />
                 </div>
 
                 <div>
@@ -528,23 +527,12 @@ export default function EditProductPage() {
                   />
                 </div>
 
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label htmlFor="barcode">Barcode</Label>
-                    <Input
-                      id="barcode"
-                      value={formData.barcode}
-                      onChange={(e) =>
-                        handleInputChange("barcode", e.target.value)
-                      }
-                      placeholder="6789012345678"
-                    />
-                  </div>
-                  <Button variant="outline" size="sm" className="mt-8">
-                    <Camera className="h-4 w-4 mr-1" />
-                    Scan
-                  </Button>
-                </div>
+                <BarcodeField
+                  value={formData.barcode}
+                  onChange={(value) => handleInputChange("barcode", value)}
+                  productName={formData.name}
+                  sku={formData.sku}
+                />
 
                 <div>
                   <Label htmlFor="unit">Satuan</Label>
