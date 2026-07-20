@@ -15,6 +15,7 @@ import {
   CircleDot,
   User,
   Users,
+  ScrollText,
   Building2,
   LayoutDashboard,
   Receipt,
@@ -336,6 +337,15 @@ export function SiteHeader({ className }: { className?: string }) {
                     <Link href="/management/users">
                       <Users className="mr-2 h-4 w-4" />
                       Manajemen User
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {(session?.user?.role === "OWNER" ||
+                  session?.user?.role === "ADMIN") && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/management/audit-log">
+                      <ScrollText className="mr-2 h-4 w-4" />
+                      Log Audit
                     </Link>
                   </DropdownMenuItem>
                 )}

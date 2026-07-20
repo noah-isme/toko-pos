@@ -8,12 +8,27 @@ type ActivityClient = {
 };
 
 export const auditActionSchema = z.enum([
+  // Shift & sales
   "SHIFT_OPEN",
   "SHIFT_CLOSE",
   "SALE_RECORD",
   "SALE_VOID",
   "SALE_REFUND",
   "LOW_STOCK_TRIGGER",
+  // Admin actions
+  "USER_CREATE",
+  "USER_UPDATE",
+  "USER_DELETE",
+  "USER_OUTLET_ASSIGN",
+  "USER_OUTLET_REVOKE",
+  "PRODUCT_CREATE",
+  "PRODUCT_UPDATE",
+  "PRODUCT_DELETE",
+  "PRODUCT_ARCHIVE",
+  "PROMOTION_CREATE",
+  "PROMOTION_UPDATE",
+  "OUTLET_CREATE",
+  "OUTLET_UPDATE",
 ]);
 
 export type AuditAction = z.infer<typeof auditActionSchema>;

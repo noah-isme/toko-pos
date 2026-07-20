@@ -3,6 +3,7 @@ import { getServerAuthSession } from "@/server/auth";
 import { db } from "@/server/db";
 import { Prisma } from "@prisma/client";
 import { Role } from "@/server/db/enums";
+import { writeAuditLog } from "@/server/services/audit";
 
 // POST /api/products - Create a new product
 export async function POST(request: Request) {
@@ -114,6 +115,14 @@ export async function POST(request: Request) {
         });
       }
     }
+
+    await writeAuditLog({
+      userId: session.user.id,
+      action: "PRODUCT_CREATE",
+      entity: "Product",
+      entityId: product.id,
+      details: { name: product.name, sku: product.sku },
+    });
 
     return NextResponse.json({
       success: true,

@@ -152,6 +152,9 @@ const shiftActivityOutputSchema = z.array(
 // Activity Log Schemas
 const activityLogInputSchema = z.object({
   outletId: z.string().optional(),
+  userId: z.string().optional(),
+  action: z.string().optional(),
+  entity: z.string().optional(),
   dateRange: dateRangeSchema.optional(),
   limit: z.number().default(20),
   offset: z.number().default(0),
@@ -163,8 +166,12 @@ const activityLogOutputSchema = z.object({
       id: z.string(),
       timestamp: z.string(),
       type: z.string(),
+      userId: z.string().nullable(),
       user: z.string(),
+      outletId: z.string().nullable(),
       outlet: z.string(),
+      entity: z.string().nullable(),
+      entityId: z.string().nullable(),
       description: z.string(),
       metadata: z.record(z.string(), z.unknown()).optional(),
     }),
@@ -889,11 +896,14 @@ export const analyticsRouter = router({
     .input(activityLogInputSchema)
     .output(activityLogOutputSchema)
     .query(async ({ input, ctx }) => {
-      const { outletId, dateRange, limit, offset } = input;
+      const { outletId, userId, action, entity, dateRange, limit, offset } = input;
       const { role, outletIds } = getOutletAccessFromContext(ctx);
 
       const where = {
         ...buildOutletWhere(role, outletIds, outletId),
+        ...(userId && { userId }),
+        ...(action && { action }),
+        ...(entity && { entity }),
         ...(dateRange && {
           createdAt: {
             gte: dateRange.from,
@@ -908,11 +918,13 @@ export const analyticsRouter = router({
           include: {
             user: {
               select: {
+                id: true,
                 name: true,
               },
             },
             outlet: {
               select: {
+                id: true,
                 name: true,
               },
             },
@@ -931,8 +943,12 @@ export const analyticsRouter = router({
           id: activity.id,
           timestamp: activity.createdAt.toISOString(),
           type: activity.action,
+          userId: activity.user?.id ?? null,
           user: activity.user?.name || "Unknown",
+          outletId: activity.outlet?.id ?? null,
           outlet: activity.outlet?.name || "System",
+          entity: activity.entity ?? null,
+          entityId: activity.entityId ?? null,
           description: `${activity.action} ${activity.entity || ""}`.trim(),
           metadata: activity.details as Record<string, unknown> | undefined,
         })),

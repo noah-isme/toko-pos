@@ -3,6 +3,7 @@ import { getServerAuthSession } from "@/server/auth";
 import { db } from "@/server/db";
 import { Prisma } from "@prisma/client";
 import { Role } from "@/server/db/enums";
+import { writeAuditLog } from "@/server/services/audit";
 
 // GET /api/products/[id] - Get product by ID
 export async function GET(
@@ -236,6 +237,14 @@ export async function PUT(
       }
     }
 
+    await writeAuditLog({
+      userId: session.user.id,
+      action: "PRODUCT_UPDATE",
+      entity: "Product",
+      entityId: product.id,
+      details: { name: product.name, sku: product.sku },
+    });
+
     return NextResponse.json({
       success: true,
       product: {
@@ -288,10 +297,24 @@ export async function DELETE(
         where: { id },
         data: { isActive: false },
       });
+      await writeAuditLog({
+        userId: session.user.id,
+        action: "PRODUCT_ARCHIVE",
+        entity: "Product",
+        entityId: id,
+        details: { softDelete: true, salesCount },
+      });
     } else {
       // Hard delete if no sales
       await db.product.delete({
         where: { id },
+      });
+      await writeAuditLog({
+        userId: session.user.id,
+        action: "PRODUCT_DELETE",
+        entity: "Product",
+        entityId: id,
+        details: { softDelete: false },
       });
     }
 

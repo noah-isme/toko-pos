@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import { Role } from "@/server/db/enums";
 import { router, protectedProcedure } from "@/server/api/trpc";
 import { getUserAccess, assertAdminOrOwner } from "@/server/api/utils/access";
+import { writeAuditLog } from "@/server/services/audit";
 import {
   userCreateInputSchema,
   userDeleteInputSchema,
@@ -120,6 +121,14 @@ export const usersRouter = router({
         select: { id: true, name: true, email: true, role: true, createdAt: true },
       });
 
+      await writeAuditLog({
+        userId: ctx.session.user.id,
+        action: "USER_CREATE",
+        entity: "User",
+        entityId: user.id,
+        details: { name: user.name, email: user.email, role: user.role },
+      });
+
       return {
         id: user.id,
         name: user.name,
@@ -189,6 +198,19 @@ export const usersRouter = router({
         select: { id: true, name: true, email: true, role: true, createdAt: true },
       });
 
+      await writeAuditLog({
+        userId: ctx.session.user.id,
+        action: "USER_UPDATE",
+        entity: "User",
+        entityId: updated.id,
+        details: {
+          name: updated.name,
+          email: updated.email,
+          role: updated.role,
+          fieldsChanged: Object.keys(data),
+        },
+      });
+
       return {
         id: updated.id,
         name: updated.name,
@@ -238,6 +260,15 @@ export const usersRouter = router({
       }
 
       await db.user.delete({ where: { id: input.id } });
+
+      await writeAuditLog({
+        userId: ctx.session.user.id,
+        action: "USER_DELETE",
+        entity: "User",
+        entityId: input.id,
+        details: { targetRole: target.role },
+      });
+
       return { id: input.id };
     }),
 
@@ -297,6 +328,19 @@ export const usersRouter = router({
         },
       });
 
+      await writeAuditLog({
+        userId: ctx.session.user.id,
+        action: "USER_OUTLET_ASSIGN",
+        entity: "UserOutlet",
+        entityId: input.userId,
+        details: {
+          targetUserId: input.userId,
+          outletId: input.outletId,
+          role: input.role,
+          isActive: input.isActive,
+        },
+      });
+
       return { userId: input.userId, outletId: input.outletId };
     }),
 
@@ -310,6 +354,14 @@ export const usersRouter = router({
           userId: input.userId,
           outletId: input.outletId,
         },
+      });
+
+      await writeAuditLog({
+        userId: ctx.session.user.id,
+        action: "USER_OUTLET_REVOKE",
+        entity: "UserOutlet",
+        entityId: input.userId,
+        details: { targetUserId: input.userId, outletId: input.outletId },
       });
 
       return { userId: input.userId, outletId: input.outletId };
