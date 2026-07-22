@@ -190,7 +190,7 @@ TaxSetting (Pengaturan PPN)
 **Fitur**:
 - ✅ Penyesuaian stok (stock adjustment)
 - ✅ Transfer stok antar outlet dengan approval workflow (PENDING → APPROVED → COMPLETED)
-- ✅ Stock opname (physical inventory)
+- ✅ Stock opname (physical inventory) dengan guided UI terpandu
 - ✅ History mutasi stok & ActivityLog
 - ✅ Evaluasi `minStock` dan penyimpanan `LowStockAlert`
 - ✅ Widget dashboard + toggle tabel produk untuk SKU kritis

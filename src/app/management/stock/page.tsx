@@ -155,10 +155,20 @@ export default function StockManagementPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Manajemen Stok</h1>
-        <p className="text-muted-foreground">
-          Pantau pergerakan stok, lakukan penyesuaian, transfer antar outlet, dan opname berkala.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Manajemen Stok</h1>
+            <p className="text-muted-foreground">
+              Pantau pergerakan stok, lakukan penyesuaian, transfer antar outlet, dan opname berkala.
+            </p>
+          </div>
+          <a
+            href="/management/stock-opname"
+            className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            Stock Opname Terpandu
+          </a>
+        </div>
       </header>
 
       <Card>

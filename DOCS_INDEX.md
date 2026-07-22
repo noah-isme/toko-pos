@@ -271,7 +271,7 @@ root repository tetap ringkas. Lihat indeksnya di
 |---------|-----------|-------------------------|
 | 2025-10-14 | Initial documentation | Semua dokumen dibuat |
 | 2026-07-12 | Arsipkan 25 dokumen historis ke `docs/archive/`, hapus artefak dev | Root `.md`, `.gitignore` |
-| 2026-07-22 | Stock transfer approval workflow, dashboard analytics, user management, audit log, product image upload, barcode generator | CHANGELOG, PROJECT_SUMMARY |
+| 2026-07-22 | Stock transfer approval workflow, dashboard analytics, user management, audit log, product image upload, barcode generator, guided stock opname UI | CHANGELOG, PROJECT_SUMMARY |
 
 ---
 

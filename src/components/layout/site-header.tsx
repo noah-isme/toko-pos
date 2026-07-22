@@ -21,6 +21,7 @@ import {
   Receipt,
   Package,
   BarChart3,
+  ClipboardCheck,
   Command
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -346,6 +347,15 @@ export function SiteHeader({ className }: { className?: string }) {
                     <Link href="/management/audit-log">
                       <ScrollText className="mr-2 h-4 w-4" />
                       Log Audit
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {(session?.user?.role === "OWNER" ||
+                  session?.user?.role === "ADMIN") && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/management/stock-opname">
+                      <ClipboardCheck className="mr-2 h-4 w-4" />
+                      Stock Opname
                     </Link>
                   </DropdownMenuItem>
                 )}
