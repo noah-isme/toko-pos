@@ -85,6 +85,18 @@ const categoryBreakdownOutputSchema = z.array(
   }),
 );
 
+// Payment Method Breakdown Schemas
+const paymentMethodBreakdownInputSchema = outletFilterSchema;
+
+const paymentMethodBreakdownOutputSchema = z.array(
+  z.object({
+    method: z.string(),
+    sales: z.number(),
+    transactions: z.number(),
+    percentage: z.number(),
+  }),
+);
+
 // Outlet Performance Schemas
 const outletPerformanceInputSchema = z.object({
   dateRange: dateRangeSchema,
@@ -623,6 +635,70 @@ export const analyticsRouter = router({
           sales: formatCurrency(data.sales),
           transactions: data.transactions.size,
           items: data.items,
+          percentage:
+            totalSales > 0
+              ? Math.round((data.sales / totalSales) * 1000) / 10
+              : 0,
+        }))
+        .sort((a, b) => b.sales - a.sales);
+    }),
+
+  /**
+   * Get Payment Method Breakdown
+   * Returns sales grouped by payment method
+   */
+  getPaymentMethodBreakdown: protectedOutletProcedure
+    .input(paymentMethodBreakdownInputSchema)
+    .output(paymentMethodBreakdownOutputSchema)
+    .query(async ({ input, ctx }) => {
+      const { outletId, dateRange } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds, outletId);
+
+      const payments = await db.payment.findMany({
+        where: {
+          sale: {
+            ...outletWhere,
+            status: SaleStatus.COMPLETED,
+            soldAt: {
+              gte: dateRange.from,
+              lte: dateRange.to,
+            },
+          },
+        },
+        select: {
+          method: true,
+          amount: true,
+          sale: { select: { id: true } },
+        },
+      });
+
+      const methodMap = new Map<
+        string,
+        { sales: number; transactions: Set<string> }
+      >();
+
+      payments.forEach((payment) => {
+        const method = payment.method;
+        const existing = methodMap.get(method) || {
+          sales: 0,
+          transactions: new Set<string>(),
+        };
+        existing.sales += Number(payment.amount);
+        existing.transactions.add(payment.sale.id);
+        methodMap.set(method, existing);
+      });
+
+      const totalSales = Array.from(methodMap.values()).reduce(
+        (sum, m) => sum + m.sales,
+        0,
+      );
+
+      return Array.from(methodMap.entries())
+        .map(([method, data]) => ({
+          method,
+          sales: data.sales,
+          transactions: data.transactions.size,
           percentage:
             totalSales > 0
               ? Math.round((data.sales / totalSales) * 1000) / 10
