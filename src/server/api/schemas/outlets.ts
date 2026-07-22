@@ -63,3 +63,58 @@ export const performOpnameInputSchema = z.object({
     )
     .min(1, { message: "Masukkan minimal satu produk" }),
 });
+
+// ---------------------------------------------------------------------------
+// Stock Transfer approval workflow schemas
+// ---------------------------------------------------------------------------
+
+export const stockTransferStatusSchema = z.enum([
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "COMPLETED",
+]);
+
+export const stockTransferItemSchema = z.object({
+  id: z.string(),
+  transferNumber: z.string(),
+  fromOutletId: z.string(),
+  toOutletId: z.string(),
+  fromOutletName: z.string(),
+  toOutletName: z.string(),
+  productId: z.string(),
+  productName: z.string(),
+  productSku: z.string(),
+  quantity: z.number().int(),
+  costPrice: z.number(),
+  status: stockTransferStatusSchema,
+  requestedById: z.string(),
+  requestedByName: z.string().nullable(),
+  approvedById: z.string().nullable(),
+  approvedByName: z.string().nullable(),
+  notes: z.string().nullable(),
+  requestedAt: z.string(),
+  approvedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+});
+
+export const stockTransferListInputSchema = z.object({
+  status: stockTransferStatusSchema.optional(),
+});
+
+export const stockTransferListOutputSchema = z.array(stockTransferItemSchema);
+
+export const createStockTransferInputSchema = z.object({
+  productId: z.string().min(1, { message: "Produk wajib diisi" }),
+  fromOutletId: z.string().min(1, { message: "Outlet asal wajib diisi" }),
+  toOutletId: z.string().min(1, { message: "Outlet tujuan wajib diisi" }),
+  quantity: z
+    .number("Jumlah harus berupa angka")
+    .int({ message: "Jumlah harus bulat" })
+    .positive({ message: "Jumlah minimal 1" }),
+  notes: z.string().max(500, { message: "Catatan maksimal 500 karakter" }).optional(),
+});
+
+export const stockTransferActionInputSchema = z.object({
+  id: z.string().min(1, { message: "ID transfer wajib diisi" }),
+});

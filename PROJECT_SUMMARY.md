@@ -189,7 +189,7 @@ TaxSetting (Pengaturan PPN)
 
 **Fitur**:
 - ✅ Penyesuaian stok (stock adjustment)
-- ✅ Transfer stok antar outlet
+- ✅ Transfer stok antar outlet dengan approval workflow (PENDING → APPROVED → COMPLETED)
 - ✅ Stock opname (physical inventory)
 - ✅ History mutasi stok & ActivityLog
 - ✅ Evaluasi `minStock` dan penyimpanan `LowStockAlert`
@@ -401,13 +401,14 @@ toko-pos/
 - [x] Alur refund/void kasir dengan konfirmasi stok
 - [x] Shift kasir + selisih kas + ActivityLog
 - [x] Low stock alerts + widget dashboard + filter tabel
+- [x] Dashboard analytics dengan charts
+- [x] User management UI dengan RBAC dan outlet assignment
+- [x] Audit log untuk admin actions
+- [x] Product image upload
+- [x] Barcode generator (Code128)
+- [x] Stock transfer approval workflow (PENDING → APPROVED → COMPLETED)
 - [ ] Laporan bulanan & tahunan
 - [ ] Export laporan ke Excel/PDF
-- [ ] Dashboard analytics dengan charts
-- [ ] User management UI
-- [ ] Audit log untuk admin actions
-- [ ] Product image upload
-- [ ] Barcode generator
 
 ### Phase 3: Integration (📋 Planned)
 

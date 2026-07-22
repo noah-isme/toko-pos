@@ -11,11 +11,18 @@ import {
 } from "@/server/api/trpc";
 import {
   assertAdminOrOwner,
+  assertOutletAccess,
+  getUserAccess,
 } from "@/server/api/utils/access";
 import { Role } from "@/server/db/enums";
 import {
   outletListOutputSchema,
   outletUpsertInputSchema,
+  stockTransferListInputSchema,
+  stockTransferListOutputSchema,
+  stockTransferItemSchema,
+  createStockTransferInputSchema,
+  stockTransferActionInputSchema,
 } from "@/server/api/schemas/outlets";
 
 export const outletsRouter = router({
@@ -375,4 +382,405 @@ export const outletsRouter = router({
         },
       }));
     }),
+
+  // -----------------------------------------------------------------
+  // Stock Transfer approval workflow (PENDING → APPROVED → COMPLETED)
+  // -----------------------------------------------------------------
+
+  listStockTransfers: protectedOutletProcedure
+    .input(stockTransferListInputSchema)
+    .output(stockTransferListOutputSchema)
+    .query(async ({ input }) => {
+      const transfers = await db.stockTransfer.findMany({
+        where: input.status ? { status: input.status } : undefined,
+        include: {
+          fromOutlet: true,
+          toOutlet: true,
+          product: true,
+          requestedBy: true,
+          approvedBy: true,
+        },
+        orderBy: {
+          requestedAt: "desc",
+        },
+      });
+
+      return stockTransferListOutputSchema.parse(
+        transfers.map((t) => ({
+          id: t.id,
+          transferNumber: t.transferNumber,
+          fromOutletId: t.fromOutletId,
+          toOutletId: t.toOutletId,
+          fromOutletName: t.fromOutlet.name,
+          toOutletName: t.toOutlet.name,
+          productId: t.productId,
+          productName: t.product.name,
+          productSku: t.product.sku,
+          quantity: t.quantity,
+          costPrice: Number(t.costPrice),
+          status: t.status as "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED",
+          requestedById: t.requestedById,
+          requestedByName: t.requestedBy?.name ?? null,
+          approvedById: t.approvedById ?? null,
+          approvedByName: t.approvedBy?.name ?? null,
+          notes: t.notes,
+          requestedAt: t.requestedAt.toISOString(),
+          approvedAt: t.approvedAt?.toISOString() ?? null,
+          completedAt: t.completedAt?.toISOString() ?? null,
+        })),
+      );
+    }),
+
+  createStockTransfer: requireOutletAccess(({ input }) => [
+    input.fromOutletId,
+    input.toOutletId,
+  ])
+    .input(createStockTransferInputSchema)
+    .output(stockTransferItemSchema)
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+
+      if (input.fromOutletId === input.toOutletId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Outlet asal dan tujuan harus berbeda",
+        });
+      }
+
+      const product = await db.product.findUnique({
+        where: { id: input.productId },
+        select: { id: true, name: true, sku: true, costPrice: true },
+      });
+
+      if (!product) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Produk tidak ditemukan",
+        });
+      }
+
+      const count = await db.stockTransfer.count();
+      const transferNumber = `TRF-${String(count + 1).padStart(4, "0")}`;
+
+      const transfer = await db.stockTransfer.create({
+        data: {
+          transferNumber,
+          fromOutletId: input.fromOutletId,
+          toOutletId: input.toOutletId,
+          productId: input.productId,
+          quantity: input.quantity,
+          costPrice: product.costPrice ?? 0,
+          status: "PENDING",
+          requestedById: userId,
+          notes: input.notes,
+        },
+        include: {
+          fromOutlet: true,
+          toOutlet: true,
+          product: true,
+          requestedBy: true,
+          approvedBy: true,
+        },
+      });
+
+      return stockTransferItemSchema.parse({
+        id: transfer.id,
+        transferNumber: transfer.transferNumber,
+        fromOutletId: transfer.fromOutletId,
+        toOutletId: transfer.toOutletId,
+        fromOutletName: transfer.fromOutlet.name,
+        toOutletName: transfer.toOutlet.name,
+        productId: transfer.productId,
+        productName: transfer.product.name,
+        productSku: transfer.product.sku,
+        quantity: transfer.quantity,
+        costPrice: Number(transfer.costPrice),
+        status: transfer.status,
+        requestedById: transfer.requestedById,
+        requestedByName: transfer.requestedBy?.name ?? null,
+        approvedById: transfer.approvedById ?? null,
+        approvedByName: transfer.approvedBy?.name ?? null,
+        notes: transfer.notes,
+        requestedAt: transfer.requestedAt.toISOString(),
+        approvedAt: transfer.approvedAt?.toISOString() ?? null,
+        completedAt: transfer.completedAt?.toISOString() ?? null,
+      });
+    }),
+
+  approveStockTransfer: protectedProcedure
+    .input(stockTransferActionInputSchema)
+    .output(stockTransferItemSchema)
+    .mutation(async ({ input, ctx }) => {
+      const { role } = await getUserAccess(ctx.session.user.id);
+      assertAdminOrOwner(role);
+      const userId = ctx.session.user.id;
+
+      const transfer = await db.stockTransfer.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!transfer) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Transfer tidak ditemukan",
+        });
+      }
+
+      if (transfer.status !== "PENDING") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Hanya transfer dengan status PENDING yang dapat disetujui",
+        });
+      }
+
+      const updated = await db.stockTransfer.update({
+        where: { id: input.id },
+        data: {
+          status: "APPROVED",
+          approvedById: userId,
+          approvedAt: new Date(),
+        },
+        include: {
+          fromOutlet: true,
+          toOutlet: true,
+          product: true,
+          requestedBy: true,
+          approvedBy: true,
+        },
+      });
+
+      return stockTransferItemSchema.parse({
+        id: updated.id,
+        transferNumber: updated.transferNumber,
+        fromOutletId: updated.fromOutletId,
+        toOutletId: updated.toOutletId,
+        fromOutletName: updated.fromOutlet.name,
+        toOutletName: updated.toOutlet.name,
+        productId: updated.productId,
+        productName: updated.product.name,
+        productSku: updated.product.sku,
+        quantity: updated.quantity,
+        costPrice: Number(updated.costPrice),
+        status: updated.status,
+        requestedById: updated.requestedById,
+        requestedByName: updated.requestedBy?.name ?? null,
+        approvedById: updated.approvedById ?? null,
+        approvedByName: updated.approvedBy?.name ?? null,
+        notes: updated.notes,
+        requestedAt: updated.requestedAt.toISOString(),
+        approvedAt: updated.approvedAt?.toISOString() ?? null,
+        completedAt: updated.completedAt?.toISOString() ?? null,
+      });
+    }),
+
+  rejectStockTransfer: protectedProcedure
+    .input(stockTransferActionInputSchema)
+    .output(stockTransferItemSchema)
+    .mutation(async ({ input, ctx }) => {
+      const { role } = await getUserAccess(ctx.session.user.id);
+      assertAdminOrOwner(role);
+
+      const transfer = await db.stockTransfer.findUnique({
+        where: { id: input.id },
+      });
+
+      if (!transfer) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Transfer tidak ditemukan",
+        });
+      }
+
+      if (transfer.status !== "PENDING") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Hanya transfer dengan status PENDING yang dapat ditolak",
+        });
+      }
+
+      const updated = await db.stockTransfer.update({
+        where: { id: input.id },
+        data: {
+          status: "REJECTED",
+          approvedById: ctx.session.user.id,
+          approvedAt: new Date(),
+        },
+        include: {
+          fromOutlet: true,
+          toOutlet: true,
+          product: true,
+          requestedBy: true,
+          approvedBy: true,
+        },
+      });
+
+      return stockTransferItemSchema.parse({
+        id: updated.id,
+        transferNumber: updated.transferNumber,
+        fromOutletId: updated.fromOutletId,
+        toOutletId: updated.toOutletId,
+        fromOutletName: updated.fromOutlet.name,
+        toOutletName: updated.toOutlet.name,
+        productId: updated.productId,
+        productName: updated.product.name,
+        productSku: updated.product.sku,
+        quantity: updated.quantity,
+        costPrice: Number(updated.costPrice),
+        status: updated.status,
+        requestedById: updated.requestedById,
+        requestedByName: updated.requestedBy?.name ?? null,
+        approvedById: updated.approvedById ?? null,
+        approvedByName: updated.approvedBy?.name ?? null,
+        notes: updated.notes,
+        requestedAt: updated.requestedAt.toISOString(),
+        approvedAt: updated.approvedAt?.toISOString() ?? null,
+        completedAt: updated.completedAt?.toISOString() ?? null,
+      });
+    }),
+
+  completeStockTransfer: protectedProcedure
+    .input(stockTransferActionInputSchema)
+    .output(stockTransferItemSchema)
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+      const outletAccess = await getUserAccess(userId);
+
+      const transfer = await db.stockTransfer.findUnique({
+        where: { id: input.id },
+        include: {
+          fromOutlet: true,
+          toOutlet: true,
+          product: true,
+        },
+      });
+
+      if (!transfer) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Transfer tidak ditemukan",
+        });
+      }
+
+      assertOutletAccess(
+        outletAccess.role,
+        outletAccess.outletIds,
+        transfer.fromOutletId,
+      );
+
+      if (transfer.status !== "APPROVED") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Hanya transfer dengan status APPROVED yang dapat diselesaikan",
+        });
+      }
+
+      return await db.$transaction(async (tx) => {
+        const source = await tx.inventory.findUnique({
+          where: {
+            productId_outletId: {
+              productId: transfer.productId,
+              outletId: transfer.fromOutletId,
+            },
+          },
+        });
+
+        if (!source || source.quantity < transfer.quantity) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Stok di outlet asal tidak mencukupi untuk menyelesaikan transfer",
+          });
+        }
+
+        const updatedSource = await tx.inventory.update({
+          where: { id: source.id },
+          data: {
+            quantity: {
+              decrement: transfer.quantity,
+            },
+          },
+        });
+
+        const target = await tx.inventory.upsert({
+          where: {
+            productId_outletId: {
+              productId: transfer.productId,
+              outletId: transfer.toOutletId,
+            },
+          },
+          update: {
+            quantity: {
+              increment: transfer.quantity,
+            },
+          },
+          create: {
+            productId: transfer.productId,
+            outletId: transfer.toOutletId,
+            quantity: transfer.quantity,
+          },
+        });
+
+        await tx.stockMovement.createMany({
+          data: [
+            {
+              inventoryId: updatedSource.id,
+              type: "TRANSFER_OUT",
+              quantity: -transfer.quantity,
+              note: `Transfer ${transfer.transferNumber}`,
+              createdById: userId,
+              productId: transfer.productId,
+              outletId: transfer.fromOutletId,
+            },
+            {
+              inventoryId: target.id,
+              type: "TRANSFER_IN",
+              quantity: transfer.quantity,
+              note: `Transfer ${transfer.transferNumber}`,
+              createdById: userId,
+              productId: transfer.productId,
+              outletId: transfer.toOutletId,
+            },
+          ],
+        });
+
+        const completed = await tx.stockTransfer.update({
+          where: { id: input.id },
+          data: {
+            status: "COMPLETED",
+            completedAt: new Date(),
+          },
+          include: {
+            fromOutlet: true,
+            toOutlet: true,
+            product: true,
+            requestedBy: true,
+            approvedBy: true,
+          },
+        });
+
+        return stockTransferItemSchema.parse({
+          id: completed.id,
+          transferNumber: completed.transferNumber,
+          fromOutletId: completed.fromOutletId,
+          toOutletId: completed.toOutletId,
+          fromOutletName: completed.fromOutlet.name,
+          toOutletName: completed.toOutlet.name,
+          productId: completed.productId,
+          productName: completed.product.name,
+          productSku: completed.product.sku,
+          quantity: completed.quantity,
+          costPrice: Number(completed.costPrice),
+          status: completed.status,
+          requestedById: completed.requestedById,
+          requestedByName: completed.requestedBy?.name ?? null,
+          approvedById: completed.approvedById ?? null,
+          approvedByName: completed.approvedBy?.name ?? null,
+          notes: completed.notes,
+          requestedAt: completed.requestedAt.toISOString(),
+          approvedAt: completed.approvedAt?.toISOString() ?? null,
+          completedAt: completed.completedAt?.toISOString() ?? null,
+        });
+      },
+      { timeout: 30000, maxWait: 10000 },
+    );
+  }),
 });
