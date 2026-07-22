@@ -22,6 +22,7 @@ import {
   Package,
   BarChart3,
   ClipboardCheck,
+  Truck,
   Command
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -356,6 +357,15 @@ export function SiteHeader({ className }: { className?: string }) {
                     <Link href="/management/stock-opname">
                       <ClipboardCheck className="mr-2 h-4 w-4" />
                       Stock Opname
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {(session?.user?.role === "OWNER" ||
+                  session?.user?.role === "ADMIN") && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/management/receiving">
+                      <Truck className="mr-2 h-4 w-4" />
+                      Penerimaan Barang
                     </Link>
                   </DropdownMenuItem>
                 )}

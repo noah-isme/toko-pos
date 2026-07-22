@@ -118,3 +118,47 @@ export const createStockTransferInputSchema = z.object({
 export const stockTransferActionInputSchema = z.object({
   id: z.string().min(1, { message: "ID transfer wajib diisi" }),
 });
+
+// ---------------------------------------------------------------------------
+// Supplier receiving (penerimaan barang) schemas
+// ---------------------------------------------------------------------------
+
+export const receiveStockItemSchema = z.object({
+  productId: z.string().min(1, { message: "Produk wajib diisi" }),
+  quantity: z
+    .number("Jumlah harus berupa angka")
+    .int({ message: "Jumlah harus bulat" })
+    .positive({ message: "Jumlah minimal 1" }),
+  costPrice: z
+    .number("Harga modal harus berupa angka")
+    .min(0, { message: "Harga modal minimal 0" }),
+});
+
+export const receiveStockInputSchema = z.object({
+  outletId: z.string().min(1, { message: "Outlet wajib diisi" }),
+  supplierId: z.string().min(1, { message: "Supplier wajib diisi" }),
+  invoiceNumber: z
+    .string()
+    .max(64, { message: "Nomor invoice maksimal 64 karakter" })
+    .optional(),
+  notes: z.string().max(500, { message: "Catatan maksimal 500 karakter" }).optional(),
+  items: z
+    .array(receiveStockItemSchema)
+    .min(1, { message: "Masukkan minimal satu item" }),
+});
+
+export const receiveStockResultItemSchema = z.object({
+  productId: z.string(),
+  productName: z.string(),
+  quantity: z.number().int(),
+  costPrice: z.number(),
+  newStockLevel: z.number().int(),
+});
+
+export const receiveStockResultSchema = z.object({
+  supplierId: z.string(),
+  supplierName: z.string(),
+  outletId: z.string(),
+  invoiceNumber: z.string().nullable(),
+  items: z.array(receiveStockResultItemSchema),
+});

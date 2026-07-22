@@ -191,6 +191,7 @@ TaxSetting (Pengaturan PPN)
 - ✅ Penyesuaian stok (stock adjustment)
 - ✅ Transfer stok antar outlet dengan approval workflow (PENDING → APPROVED → COMPLETED)
 - ✅ Stock opname (physical inventory) dengan guided UI terpandu
+- ✅ Penerimaan barang dari supplier (PURCHASE movement + costPrice update)
 - ✅ History mutasi stok & ActivityLog
 - ✅ Evaluasi `minStock` dan penyimpanan `LowStockAlert`
 - ✅ Widget dashboard + toggle tabel produk untuk SKU kritis
@@ -407,6 +408,8 @@ toko-pos/
 - [x] Product image upload
 - [x] Barcode generator (Code128)
 - [x] Stock transfer approval workflow (PENDING → APPROVED → COMPLETED)
+- [x] Guided stock opname UI
+- [x] Supplier receiving (penerimaan barang)
 - [ ] Laporan bulanan & tahunan
 - [ ] Export laporan ke Excel/PDF
 

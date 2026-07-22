@@ -23,6 +23,8 @@ import {
   stockTransferItemSchema,
   createStockTransferInputSchema,
   stockTransferActionInputSchema,
+  receiveStockInputSchema,
+  receiveStockResultSchema,
 } from "@/server/api/schemas/outlets";
 
 export const outletsRouter = router({
@@ -783,4 +785,140 @@ export const outletsRouter = router({
       { timeout: 30000, maxWait: 10000 },
     );
   }),
+
+  // -----------------------------------------------------------------
+  // Supplier receiving (penerimaan barang)
+  // -----------------------------------------------------------------
+
+  receiveStock: requireOutletAccess(({ input }) => input.outletId)
+    .input(receiveStockInputSchema)
+    .output(receiveStockResultSchema)
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+
+      const supplier = await db.supplier.findUnique({
+        where: { id: input.supplierId },
+        select: { id: true, name: true },
+      });
+
+      if (!supplier) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Supplier tidak ditemukan",
+        });
+      }
+
+      const productIds = input.items.map((i) => i.productId);
+      const products = await db.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, name: true, supplierId: true },
+      });
+
+      const productMap = new Map(products.map((p) => [p.id, p]));
+
+      for (const item of input.items) {
+        if (!productMap.has(item.productId)) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: `Produk dengan ID ${item.productId} tidak ditemukan`,
+          });
+        }
+      }
+
+      const reference = input.invoiceNumber
+        ? `INV-${input.invoiceNumber}`
+        : undefined;
+      const note = input.notes
+        ? `Penerimaan dari ${supplier.name}${input.notes ? ` — ${input.notes}` : ""}`
+        : `Penerimaan dari ${supplier.name}`;
+
+      return await db.$transaction(
+        async (tx) => {
+          const results: Array<{
+            productId: string;
+            productName: string;
+            quantity: number;
+            costPrice: number;
+            newStockLevel: number;
+          }> = [];
+
+          for (const item of input.items) {
+            const product = productMap.get(item.productId)!;
+
+            // Link product to supplier if not already linked
+            if (!product.supplierId) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { supplierId: input.supplierId },
+              });
+            }
+
+            // Update product costPrice
+            await tx.product.update({
+              where: { id: item.productId },
+              data: {
+                costPrice: item.costPrice,
+              },
+            });
+
+            // Upsert inventory (increment existing or create new)
+            const existing = await tx.inventory.findUnique({
+              where: {
+                productId_outletId: {
+                  productId: item.productId,
+                  outletId: input.outletId,
+                },
+              },
+            });
+
+            const inventory = existing
+              ? await tx.inventory.update({
+                  where: { id: existing.id },
+                  data: {
+                    quantity: { increment: item.quantity },
+                    costPrice: item.costPrice,
+                  },
+                })
+              : await tx.inventory.create({
+                  data: {
+                    productId: item.productId,
+                    outletId: input.outletId,
+                    quantity: item.quantity,
+                    costPrice: item.costPrice,
+                  },
+                });
+
+            await tx.stockMovement.create({
+              data: {
+                inventoryId: inventory.id,
+                type: "PURCHASE",
+                quantity: item.quantity,
+                reference,
+                note,
+                createdById: userId,
+                productId: item.productId,
+                outletId: input.outletId,
+              },
+            });
+
+            results.push({
+              productId: item.productId,
+              productName: product.name,
+              quantity: item.quantity,
+              costPrice: item.costPrice,
+              newStockLevel: inventory.quantity,
+            });
+          }
+
+          return receiveStockResultSchema.parse({
+            supplierId: supplier.id,
+            supplierName: supplier.name,
+            outletId: input.outletId,
+            invoiceNumber: input.invoiceNumber ?? null,
+            items: results,
+          });
+        },
+        { timeout: 30000, maxWait: 10000 },
+      );
+    }),
 });
