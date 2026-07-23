@@ -30,7 +30,9 @@ deterministik agar baseline tetap stabil di lingkungan lokal dan CI.
 
 - Modul kasir end-to-end (scan barcode, diskon item, diskon tambahan, kalkulasi PPN, pembayaran mock, cetak struk PDF).
 - Manajemen produk, kategori, dan supplier lengkap dengan konfigurasi harga, promo, dan PPN per produk.
-- Panel pengaturan PPN untuk menentukan tarif aktif yang dipakai kasir.
+- Halaman pengaturan PPN (`/management/settings`) untuk mengelola tarif PPN (CRUD, aktivasi, PPN aktif yang dipakai kasir).
+- Riwayat pergerakan stok (`/management/stock-movement`) dengan filter produk, outlet, jenis, dan tanggal dari data nyata.
+- Laporan & analitik (`/management/reports`) dengan KPI, grafik penjualan, item terlaris, dan analisis per shift dari data nyata.
 - Laporan penjualan harian (total transaksi, total item, total kas tunai, estimasi float keesokan hari).
 - Integrasi NextAuth dengan role Owner, Admin, Kasir (enum `Role` pada Prisma).
 - Template struk PDF siap cetak menggunakan `pdf-lib`.
@@ -143,9 +145,18 @@ deterministik agar baseline tetap stabil di lingkungan lokal dan CI.
 - `src/app/reports/daily/page.tsx` – Laporan penjualan harian.
 - `src/app/management/products/page.tsx` – Manajemen produk + kategori + supplier + konfigurasi promo/PPN.
 - `src/app/management/stock/page.tsx` – Penyesuaian stok, transfer, dan stock opname.
+- `src/app/management/stock-movement/page.tsx` – Riwayat pergerakan stok (masuk/keluar/transfer/penyesuaian) dengan filter produk, outlet, jenis, dan tanggal.
+- `src/app/management/reports/page.tsx` – Laporan & analitik (KPI, grafik penjualan, item terlaris, analisis per shift).
+- `src/app/management/settings/page.tsx` – Pengaturan tarif PPN (CRUD, aktivasi, PPN aktif saat ini).
+- `src/app/management/stock-transfer/page.tsx` – Transfer stok antar outlet dengan approval workflow.
+- `src/app/management/stock-opname/page.tsx` – Stock opname dengan alur terpandu 3 langkah.
+- `src/app/management/receiving/page.tsx` – Penerimaan barang dari supplier.
+- `src/app/management/users/page.tsx` – Manajemen user dengan RBAC dan penugasan outlet.
+- `src/app/management/audit-log/page.tsx` – Log audit aktivitas admin.
+- `src/app/management/promotions/page.tsx` – Manajemen promosi.
 - `src/app/docs/implementation/page.tsx` – Panduan implementasi langkah demi langkah.
 - `src/app/docs/persiapan-awal/page.tsx` – Checklist persiapan awal yang mendetail (tujuan, alur kasir, role, outlet).
-- `src/server/api` – Router tRPC (`sales`, `products`, `outlets`, `settings`).
+- `src/server/api` – Router tRPC (`sales`, `products`, `outlets`, `settings`, `inventory`, `analytics`, `promotions`, `tasks`, `users`, `cashSessions`).
 - `prisma/schema.prisma` – Skema database beserta enum Role dan PaymentMethod.
 - `scripts/seed-supabase.mjs` – Script impor CSV ke Supabase.
 - `data/initial-products.csv` – Dataset awal untuk script seed.

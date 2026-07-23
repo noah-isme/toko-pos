@@ -312,7 +312,17 @@ toko-pos/
 │   │   ├── cashier/          # Halaman kasir
 │   │   ├── management/       # Halaman manajemen
 │   │   │   ├── products/    # Kelola produk
-│   │   │   └── stock/       # Kelola stok
+│   │   │   ├── stock/       # Kelola stok
+│   │   │   ├── stock-movement/ # Riwayat pergerakan stok
+│   │   │   ├── stock-transfer/ # Transfer stok antar outlet
+│   │   │   ├── stock-opname/  # Stock opname terpandu
+│   │   │   ├── receiving/    # Penerimaan barang dari supplier
+│   │   │   ├── reports/     # Laporan & analitik
+│   │   │   ├── promotions/  # Manajemen promosi
+│   │   │   ├── users/       # Manajemen user (RBAC)
+│   │   │   ├── audit-log/   # Log audit
+│   │   │   ├── settings/    # Pengaturan PPN
+│   │   │   └── master-data/ # Kategori & supplier
 │   │   ├── reports/          # Halaman laporan
 │   │   │   └── daily/       # Laporan harian
 │   │   └── auth/             # Halaman login/logout
@@ -343,9 +353,10 @@ toko-pos/
 │   └── initial-products.csv  # Data produk awal
 ├── tests/
 │   ├── unit/                 # Vitest unit tests
+│   ├── api/                  # API integration tests
 │   └── e2e/                  # Playwright E2E tests
 ├── docs/
-│   └── UI_STYLE.md           # Style guide
+│   └── archive/              # Dokumentasi historis (redesign, feature summary)
 ├── CHANGELOG.md              # Riwayat perubahan
 ├── MIGRATION_GUIDE.md        # Panduan migrasi database
 ├── DEPLOYMENT.md             # Panduan deployment
@@ -410,6 +421,9 @@ toko-pos/
 - [x] Stock transfer approval workflow (PENDING → APPROVED → COMPLETED)
 - [x] Guided stock opname UI
 - [x] Supplier receiving (penerimaan barang)
+- [x] Halaman pengaturan PPN (`/management/settings`) dengan CRUD tarif
+- [x] Halaman pergerakan stok (`/management/stock-movement`) ke API nyata
+- [x] Halaman laporan & analitik (`/management/reports`) ke API nyata
 - [ ] Laporan bulanan & tahunan
 - [ ] Export laporan ke Excel/PDF
 
@@ -522,5 +536,5 @@ Tambahkan screenshot jika membantu.
 
 **Catatan**: Dokumen ini adalah living document dan akan diupdate seiring perkembangan proyek.
 
-**Last Updated**: Oktober 2025
+**Last Updated**: Juli 2026
 **Version**: 0.1.0

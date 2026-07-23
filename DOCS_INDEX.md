@@ -272,10 +272,11 @@ root repository tetap ringkas. Lihat indeksnya di
 | 2025-10-14 | Initial documentation | Semua dokumen dibuat |
 | 2026-07-12 | Arsipkan 25 dokumen historis ke `docs/archive/`, hapus artefak dev | Root `.md`, `.gitignore` |
 | 2026-07-22 | Stock transfer approval workflow, dashboard analytics, user management, audit log, product image upload, barcode generator, guided stock opname UI, supplier receiving | CHANGELOG, PROJECT_SUMMARY |
+| 2026-07-24 | Stock-movement & reports pages wired to real tRPC APIs, settings page (PPN CRUD), pnpm build script approval | CHANGELOG, README, PROJECT_SUMMARY, DOCS_INDEX |
 
 ---
 
 **Catatan**: Dokumentasi ini adalah living document. Jika ada informasi yang kurang jelas atau perlu ditambahkan, silakan buat issue atau pull request.
 
 **Maintained by**: Toko POS Team  
-**Last Updated**: 2026-07-22
+**Last Updated**: 2026-07-24

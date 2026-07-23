@@ -40,6 +40,7 @@
 - When handling outlet-specific data, scope totals to the requester’s outlet, especially in analytics, inventory, and sales contexts.
 
 ## Onboarding & Knowledge Sharing
-- Start with `README.md` and the quickstart docs (`QUICK_MODE_SUMMARY.md`, `OWNER_DASHBOARD_INDEX.md`) to understand product flows.
-- Use `CHECK-LOGS.sh` and `DEBUG-STEPS.md` when investigating runtime issues; follow `DEPLOYMENT.md` when promoting builds.
-- Mention any outstanding feature work (promotion engine, task center, RBAC tests) in PR descriptions so reviewers know what remains.
+- Start with `README.md` and `DOCS_INDEX.md` to understand product flows and available documentation.
+- Archived feature summaries (quick mode, owner dashboard, stock management pages) live under `docs/archive/`.
+- Follow `DEPLOYMENT.md` when promoting builds.
+- Mention any outstanding feature work (monthly/yearly reports, Excel/PDF export, RBAC tests) in PR descriptions so reviewers know what remains.
