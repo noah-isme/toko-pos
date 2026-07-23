@@ -15,6 +15,10 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { toast } from "sonner";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import { Download, FileText } from "lucide-react";
 
 import { MotionButton as Button } from "@/components/ui/button";
 import {
@@ -28,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MotionTableBody, MotionTableRow } from "@/components/ui/motion-table";
 import { api } from "@/trpc/client";
+import { downloadCSV } from "@/lib/export";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -64,6 +69,63 @@ export default function DailyReportPage() {
       sale.items.some(item => item.productName.toLowerCase().includes(search.toLowerCase()))
     );
   }, [summaryQuery.data?.sales, search]);
+
+  const exportDailyCSV = () => {
+    if (!summaryQuery.data) {
+      toast.error("Data belum tersedia");
+      return;
+    }
+    const headers = ["No. Struk", "Waktu", "Metode Bayar", "Total"];
+    const rows = (filteredSales.length ? filteredSales : summaryQuery.data.sales).map((sale) => [
+      sale.receiptNumber,
+      format(new Date(sale.soldAt), "HH:mm:ss"),
+      sale.paymentMethods.join(", "),
+      sale.totalNet,
+    ]);
+    downloadCSV(`laporan-harian-${selectedDate}.csv`, headers, rows);
+    toast.success("CSV berhasil diekspor");
+  };
+
+  const exportDailyPDF = () => {
+    if (!summaryQuery.data) {
+      toast.error("Data belum tersedia");
+      return;
+    }
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("Toko POS - Laporan Harian", pageWidth / 2, 18, { align: "center" });
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Tanggal: ${format(new Date(selectedDate), "dd MMMM yyyy", { locale: localeId })}`, 14, 28);
+      doc.text(`Total Transaksi: ${summaryQuery.data.sales.length}`, 14, 34);
+      doc.text(`Total Penjualan: ${formatCurrency(summaryQuery.data.totals.totalNet)}`, 14, 40);
+      doc.text(`Total Item: ${summaryQuery.data.totals.totalItems}`, 14, 46);
+      doc.line(14, 50, pageWidth - 14, 50);
+
+      autoTable(doc, {
+        startY: 54,
+        head: [["No. Struk", "Waktu", "Metode Bayar", "Total"]],
+        body: (filteredSales.length ? filteredSales : summaryQuery.data.sales).map((sale) => [
+          sale.receiptNumber,
+          format(new Date(sale.soldAt), "HH:mm:ss"),
+          sale.paymentMethods.join(", "),
+          formatCurrency(sale.totalNet),
+        ]),
+        theme: "grid",
+        headStyles: { fillColor: [59, 130, 246] },
+        margin: { left: 14, right: 14 },
+      });
+
+      doc.save(`laporan-harian-${selectedDate}.pdf`);
+      toast.success("PDF berhasil diekspor");
+    } catch {
+      toast.error("Gagal export PDF");
+    }
+  };
 
   const weeklyChartData = useMemo(() => {
     if (!weeklyTrendQuery.data?.series) return [];
@@ -167,6 +229,14 @@ export default function DailyReportPage() {
                 onChange={(event) => setSelectedDate(event.target.value)}
               />
               <Button onClick={() => summaryQuery.refetch()}>Refresh</Button>
+              <Button variant="outline" size="sm" onClick={exportDailyPDF} disabled={!summaryQuery.data}>
+                <FileText className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportDailyCSV} disabled={!summaryQuery.data}>
+                <Download className="mr-2 h-4 w-4" />
+                CSV
+              </Button>
             </div>
           </div>
 

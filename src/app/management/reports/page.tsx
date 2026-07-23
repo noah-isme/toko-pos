@@ -6,9 +6,13 @@ import {
   endOfDay,
   startOfWeek,
   startOfMonth,
+  startOfYear,
   format,
   differenceInHours,
 } from "date-fns";
+import { toast } from "sonner";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -42,6 +46,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { api } from "@/trpc/client";
+import { downloadCSV } from "@/lib/export";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -51,19 +56,74 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-function getPeriodRange(period: string) {
+const formatCurrencyPlain = (value: number) =>
+  new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+
+type Granularity = "hour" | "day" | "week" | "month" | "year";
+
+function getPeriodRange(period: string): {
+  from: Date;
+  to: Date;
+  granularity: Granularity;
+  label: string;
+} {
   const now = new Date();
   switch (period) {
     case "today":
-      return { from: startOfDay(now), to: endOfDay(now), granularity: "hour" as const };
+      return {
+        from: startOfDay(now),
+        to: endOfDay(now),
+        granularity: "hour",
+        label: "Hari Ini",
+      };
     case "month":
-      return { from: startOfMonth(now), to: endOfDay(now), granularity: "day" as const };
+      return {
+        from: startOfMonth(now),
+        to: endOfDay(now),
+        granularity: "day",
+        label: "Bulan Ini",
+      };
+    case "year":
+      return {
+        from: startOfYear(now),
+        to: endOfDay(now),
+        granularity: "month",
+        label: "Tahun Ini",
+      };
     default:
-      return { from: startOfWeek(now), to: endOfDay(now), granularity: "day" as const };
+      return {
+        from: startOfWeek(now),
+        to: endOfDay(now),
+        granularity: "day",
+        label: "Minggu Ini",
+      };
   }
 }
 
-function TrendIndicator({ trend }: { trend?: { value: number; direction: string } }) {
+function formatChartLabel(timestamp: string, granularity: Granularity): string {
+  const date = new Date(timestamp);
+  switch (granularity) {
+    case "hour":
+      return format(date, "HH:mm");
+    case "day":
+      return format(date, "dd MMM");
+    case "month":
+      return format(date, "MMM");
+    case "year":
+      return format(date, "yyyy");
+    default:
+      return format(date, "dd MMM");
+  }
+}
+
+function TrendIndicator({
+  trend,
+}: {
+  trend?: { value: number; direction: string };
+}) {
   if (!trend) return null;
   const isUp = trend.direction === "up";
   const isDown = trend.direction === "down";
@@ -115,25 +175,177 @@ export default function ReportsPage() {
   );
 
   const chartData = useMemo(() => {
-    return (salesTrendQuery.data ?? []).map((point) => {
-      const date = new Date(point.timestamp);
-      return {
-        date:
-          periodRange.granularity === "hour"
-            ? format(date, "HH:mm")
-            : format(date, "dd MMM"),
-        sales: point.sales,
-        transactions: point.transactions,
-      };
-    });
+    return (salesTrendQuery.data ?? []).map((point) => ({
+      date: formatChartLabel(point.timestamp, periodRange.granularity),
+      sales: point.sales,
+      transactions: point.transactions,
+    }));
   }, [salesTrendQuery.data, periodRange.granularity]);
 
-  const exportPDF = () => {
-    console.log("Export PDF clicked");
-  };
+  const outletName =
+    outletsQuery.data?.find((o) => o.id === selectedOutlet)?.name ??
+    "Semua Outlet";
 
   const exportCSV = () => {
-    console.log("Export CSV clicked");
+    const kpi = kpiQuery.data;
+    if (!kpi) {
+      toast.error("Data laporan belum tersedia");
+      return;
+    }
+
+    const headers = [
+      "Periode",
+      "Outlet",
+      "Total Penjualan",
+      "Total Transaksi",
+      "Item Terjual",
+      "Rata-rata per Transaksi",
+    ];
+    const rows: (string | number)[][] = [
+      [
+        periodRange.label,
+        outletName,
+        formatCurrencyPlain(kpi.totalSales.current),
+        kpi.totalTransactions.current,
+        kpi.itemsSold.current,
+        formatCurrencyPlain(kpi.averageTransactionValue.current),
+      ],
+    ];
+
+    if (salesTrendQuery.data?.length) {
+      rows.push([]);
+      rows.push(["Tren Penjualan"]);
+      rows.push(["Tanggal", "Penjualan", "Transaksi", "Item"]);
+      salesTrendQuery.data.forEach((point) => {
+        rows.push([
+          formatChartLabel(point.timestamp, periodRange.granularity),
+          formatCurrencyPlain(point.sales),
+          point.transactions,
+          point.items,
+        ]);
+      });
+    }
+
+    if (topProductsQuery.data?.length) {
+      rows.push([]);
+      rows.push(["Item Terlaris"]);
+      rows.push(["Produk", "Kuantitas", "Pendapatan"]);
+      topProductsQuery.data.forEach((item) => {
+        rows.push([
+          item.productName,
+          item.quantity,
+          formatCurrencyPlain(item.revenue),
+        ]);
+      });
+    }
+
+    const dateStr = format(new Date(), "yyyy-MM-dd");
+    downloadCSV(`laporan-${dateStr}.csv`, headers, rows);
+    toast.success("CSV berhasil diekspor");
+  };
+
+  const exportPDF = () => {
+    const kpi = kpiQuery.data;
+    if (!kpi) {
+      toast.error("Data laporan belum tersedia");
+      return;
+    }
+
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.text("Toko POS - Laporan & Analitik", pageWidth / 2, 20, {
+        align: "center",
+      });
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Outlet: ${outletName}`, 14, 30);
+      doc.text(`Periode: ${periodRange.label}`, 14, 36);
+      doc.text(
+        `Dibuat: ${format(new Date(), "dd MMM yyyy HH:mm")}`,
+        14,
+        42,
+      );
+      doc.line(14, 46, pageWidth - 14, 46);
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Ringkasan KPI", 14, 56);
+
+      autoTable(doc, {
+        startY: 60,
+        head: [["Metrik", "Nilai"]],
+        body: [
+          ["Total Penjualan", formatCurrencyPlain(kpi.totalSales.current)],
+          ["Total Transaksi", String(kpi.totalTransactions.current)],
+          ["Item Terjual", String(kpi.itemsSold.current)],
+          [
+            "Rata-rata per Transaksi",
+            formatCurrencyPlain(kpi.averageTransactionValue.current),
+          ],
+        ],
+        theme: "grid",
+        headStyles: { fillColor: [59, 130, 246] },
+        margin: { left: 14, right: 14 },
+      });
+
+      if (topProductsQuery.data?.length) {
+        autoTable(doc, {
+          startY: (doc as unknown as { lastAutoTable: { finalY: number } })
+            .lastAutoTable.finalY + 10,
+          head: [["#", "Produk", "Kuantitas", "Pendapatan"]],
+          body: topProductsQuery.data.map((item, i) => [
+            String(i + 1),
+            item.productName,
+            String(item.quantity),
+            formatCurrencyPlain(item.revenue),
+          ]),
+          theme: "grid",
+          headStyles: { fillColor: [59, 130, 246] },
+          margin: { left: 14, right: 14 },
+        });
+      }
+
+      if (salesTrendQuery.data?.length) {
+        autoTable(doc, {
+          startY: (doc as unknown as { lastAutoTable: { finalY: number } })
+            .lastAutoTable.finalY + 10,
+          head: [["Periode", "Penjualan", "Transaksi", "Item"]],
+          body: salesTrendQuery.data.map((point) => [
+            formatChartLabel(point.timestamp, periodRange.granularity),
+            formatCurrencyPlain(point.sales),
+            String(point.transactions),
+            String(point.items),
+          ]),
+          theme: "grid",
+          headStyles: { fillColor: [59, 130, 246] },
+          margin: { left: 14, right: 14 },
+        });
+      }
+
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.text(
+          `Generated on ${new Date().toLocaleString("id-ID")}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: "center" },
+        );
+      }
+
+      const dateStr = format(new Date(), "yyyy-MM-dd");
+      doc.save(`laporan-${dateStr}.pdf`);
+      toast.success("PDF berhasil diekspor");
+    } catch {
+      toast.error("Gagal export PDF");
+    }
   };
 
   const kpi = kpiQuery.data;
@@ -155,7 +367,10 @@ export default function ReportsPage() {
 
             {/* Filters & Actions */}
             <div className="flex flex-wrap items-center gap-3">
-              <Select value={selectedOutlet} onValueChange={setSelectedOutlet}>
+              <Select
+                value={selectedOutlet}
+                onValueChange={setSelectedOutlet}
+              >
                 <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Pilih outlet" />
                 </SelectTrigger>
@@ -169,7 +384,10 @@ export default function ReportsPage() {
                 </SelectContent>
               </Select>
 
-              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <Select
+                value={selectedPeriod}
+                onValueChange={setSelectedPeriod}
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Pilih periode" />
                 </SelectTrigger>
@@ -177,14 +395,25 @@ export default function ReportsPage() {
                   <SelectItem value="today">Hari Ini</SelectItem>
                   <SelectItem value="week">Minggu Ini</SelectItem>
                   <SelectItem value="month">Bulan Ini</SelectItem>
+                  <SelectItem value="year">Tahun Ini</SelectItem>
                 </SelectContent>
               </Select>
 
-              <Button variant="outline" size="sm" onClick={exportPDF}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportPDF}
+                disabled={!kpi}
+              >
                 <FileText className="mr-2 h-4 w-4" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={exportCSV}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportCSV}
+                disabled={!kpi}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 CSV
               </Button>
@@ -285,7 +514,9 @@ export default function ReportsPage() {
                     {isLoading ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
-                      formatCurrency(kpi?.averageTransactionValue.current ?? 0)
+                      formatCurrency(
+                        kpi?.averageTransactionValue.current ?? 0,
+                      )
                     )}
                   </h3>
                 </div>
@@ -305,7 +536,7 @@ export default function ReportsPage() {
           {/* Sales Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Grafik Penjualan Harian</CardTitle>
+              <CardTitle>Grafik Penjualan</CardTitle>
             </CardHeader>
             <CardContent>
               {salesTrendQuery.isLoading ? (
@@ -356,7 +587,7 @@ export default function ReportsPage() {
           {/* Transactions Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Tren Transaksi Harian</CardTitle>
+              <CardTitle>Tren Transaksi</CardTitle>
             </CardHeader>
             <CardContent>
               {salesTrendQuery.isLoading ? (

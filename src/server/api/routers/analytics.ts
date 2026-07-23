@@ -60,7 +60,7 @@ const kpiSummaryOutputSchema = z.object({
 
 // Sales Trend Schemas
 const salesTrendInputSchema = outletFilterSchema.extend({
-  granularity: z.enum(["hour", "day", "week", "month"]).default("day"),
+  granularity: z.enum(["hour", "day", "week", "month", "year"]).default("day"),
 });
 
 const salesTrendOutputSchema = z.array(
@@ -545,6 +545,9 @@ export const analyticsRouter = router({
             break;
           case "month":
             key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+            break;
+          case "year":
+            key = `${date.getFullYear()}`;
             break;
           default:
             key = date.toISOString().split("T")[0];
