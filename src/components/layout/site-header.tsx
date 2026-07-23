@@ -329,9 +329,11 @@ export function SiteHeader({ className }: { className?: string }) {
                   <Building2 className="mr-2 h-4 w-4" />
                   Outlet Saya
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Pengaturan
+                <DropdownMenuItem asChild>
+                  <Link href="/management/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Pengaturan
+                  </Link>
                 </DropdownMenuItem>
                 {(session?.user?.role === "OWNER" ||
                   session?.user?.role === "ADMIN") && (
