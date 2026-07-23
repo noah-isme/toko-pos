@@ -400,6 +400,34 @@ export const productsRouter = router({
         },
       });
 
+      if (input.inventoryLines && input.inventoryLines.length > 0) {
+        for (const line of input.inventoryLines) {
+          const existing = await db.inventory.findUnique({
+            where: {
+              productId_outletId: {
+                productId: product.id,
+                outletId: line.outletId,
+              },
+            },
+          });
+
+          if (existing) {
+            await db.inventory.update({
+              where: { id: existing.id },
+              data: { quantity: line.quantity },
+            });
+          } else {
+            await db.inventory.create({
+              data: {
+                productId: product.id,
+                outletId: line.outletId,
+                quantity: line.quantity,
+              },
+            });
+          }
+        }
+      }
+
       return productUpsertOutputSchema.parse({
         id: product.id,
       });

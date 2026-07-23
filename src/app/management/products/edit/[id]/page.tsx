@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
+import { api } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,17 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ChevronLeft,
-  ChevronDown,
-  Plus,
-  Camera,
-  X,
-  Copy,
-  Archive,
-  Trash2,
-} from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { ChevronLeft, ChevronDown, Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -50,143 +44,105 @@ interface OutletStock {
 export default function EditProductPage() {
   const router = useRouter();
   const params = useParams();
-  const { toast } = useToast();
+  const utils = api.useContext();
+  const productId = params.id as string;
+
   const [loading, setLoading] = useState(false);
   const [showPromo, setShowPromo] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  // Form state
+  const productsQuery = api.products.list.useQuery({ take: 100 });
+  const categoriesQuery = api.products.categories.useQuery();
+  const suppliersQuery = api.products.suppliers.useQuery();
+  const inventoryQuery = api.products.getInventoryByProduct.useQuery(
+    { productId },
+    { enabled: Boolean(productId) },
+  );
+
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
+    supplierId: "",
     description: "",
     image: "",
-    status: "active",
+    status: "active" as "active" | "inactive",
     sku: "",
     barcode: "",
-    unit: "",
     tags: [] as string[],
     costPrice: "",
     sellingPrice: "",
     taxId: "",
     discount: "",
     promoName: "",
-    promoType: "",
     promoValue: "",
     promoStartDate: "",
     promoEndDate: "",
   });
 
-  const [outlets, setOutlets] = useState<OutletStock[]>([
-    { outletId: "1", outletName: "Outlet Cabang BSD", stock: 0, minStock: 0 },
-    {
-      outletId: "2",
-      outletName: "Outlet Cabang BSD (BR2)",
-      stock: 0,
-      minStock: 0,
-    },
-  ]);
+  const [outletStocks, setOutletStocks] = useState<OutletStock[]>([]);
 
-  const [categories] = useState([
-    { id: "1", name: "Minuman" },
-    { id: "2", name: "Makanan" },
-    { id: "3", name: "Sembako" },
-  ]);
+  // Find the product from the list
+  const product = productsQuery.data?.find((p) => p.id === productId);
 
-  const [taxRates] = useState([
-    { id: "0", name: "Tanpa PPN", rate: 0 },
-    { id: "1", name: "PPN 11%", rate: 11 },
-    { id: "2", name: "PPN 12%", rate: 12 },
-  ]);
-
-  // Load product data
+  // Load product data into form once available
   useEffect(() => {
-    const loadProduct = async () => {
-      try {
-        const response = await fetch(`/api/products/${params.id}`);
-        if (!response.ok) throw new Error("Failed to load product");
-
-        const product = (await response.json()) as {
-          name?: string;
-          categoryId?: string;
-          description?: string;
-          image?: string;
-          status?: string;
-          sku?: string;
-          barcode?: string;
-          unit?: string;
-          tags?: string[];
-          costPrice?: number;
-          sellingPrice?: number;
-          taxId?: string;
-          discount?: number;
-          promoName?: string;
-          promoType?: string;
-          promoValue?: number;
-          promoStartDate?: string;
-          promoEndDate?: string;
-          stocks?: Array<{
-            outletId: string;
-            outlet?: { name: string };
-            quantity: number;
-            minStock: number;
-          }>;
-        };
-
-        // Populate form data
-        setFormData({
-          name: product.name || "",
-          categoryId: product.categoryId || "",
-          description: product.description || "",
-          image: product.image || "",
-          status: product.status || "active",
-          sku: product.sku || "",
-          barcode: product.barcode || "",
-          unit: product.unit || "",
-          tags: product.tags || [],
-          costPrice: product.costPrice?.toString() || "",
-          sellingPrice: product.sellingPrice?.toString() || "",
-          taxId: product.taxId || "",
-          discount: product.discount?.toString() || "",
-          promoName: product.promoName || "",
-          promoType: product.promoType || "",
-          promoValue: product.promoValue?.toString() || "",
-          promoStartDate: product.promoStartDate || "",
-          promoEndDate: product.promoEndDate || "",
-        });
-
-        // Load outlet stocks if available
-        if (product.stocks && product.stocks.length > 0) {
-          setOutlets(
-            product.stocks.map(
-              (s: {
-                outletId: string;
-                outlet?: { name?: string };
-                quantity?: number;
-                minStock?: number;
-              }) => ({
-                outletId: s.outletId,
-                outletName: s.outlet?.name || `Outlet ${s.outletId}`,
-                stock: s.quantity || 0,
-                minStock: s.minStock || 0,
-              }),
-            ),
-          );
-        }
-      } catch {
-        toast({
-          title: "Error",
-          description: "Gagal memuat data produk",
-          variant: "destructive",
-        });
-      }
-    };
-
-    if (params.id) {
-      loadProduct();
+    if (product && !loaded) {
+      setFormData({
+        name: product.name,
+        categoryId: product.categoryId ?? "",
+        supplierId: product.supplierId ?? "",
+        description: "",
+        image: product.imageUrl ?? "",
+        status: product.isActive ? "active" : "inactive",
+        sku: product.sku,
+        barcode: product.barcode ?? "",
+        tags: [],
+        costPrice: product.costPrice?.toString() ?? "",
+        sellingPrice: product.price.toString(),
+        taxId: product.isTaxable
+          ? product.taxRate === 12
+            ? "2"
+            : "1"
+            : "0",
+        discount: product.defaultDiscountPercent?.toString() ?? "",
+        promoName: product.promoName ?? "",
+        promoValue: product.promoPrice?.toString() ?? "",
+        promoStartDate: product.promoStart
+          ? new Date(product.promoStart).toISOString().slice(0, 10)
+          : "",
+        promoEndDate: product.promoEnd
+          ? new Date(product.promoEnd).toISOString().slice(0, 10)
+          : "",
+      });
+      setLoaded(true);
     }
-  }, [params.id, toast]);
+  }, [product, loaded]);
+
+  // Load inventory into outletStocks
+  useEffect(() => {
+    if (inventoryQuery.data && outletStocks.length === 0) {
+      setOutletStocks(
+        inventoryQuery.data.map((inv) => ({
+          outletId: inv.outletId,
+          outletName: inv.outletName,
+          stock: inv.quantity,
+          minStock: 0,
+        })),
+      );
+    }
+  }, [inventoryQuery.data, outletStocks.length]);
+
+  const upsertMutation = api.products.upsert.useMutation({
+    onSuccess: () => {
+      toast.success("Produk berhasil diperbarui");
+      void utils.products.list.invalidate();
+    },
+    onError: (err) => {
+      toast.error("Gagal menyimpan produk", { description: err.message });
+    },
+  });
 
   const handleInputChange = (field: string, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -197,151 +153,92 @@ export default function EditProductPage() {
     field: "stock" | "minStock",
     value: number,
   ) => {
-    const newOutlets = [...outlets];
-    newOutlets[index][field] = value;
-    setOutlets(newOutlets);
+    setOutletStocks((prev) => {
+      const next = [...prev];
+      next[index][field] = value;
+      return next;
+    });
   };
 
   const calculateSummary = () => {
     const sellingPrice = parseFloat(formData.sellingPrice) || 0;
     const costPrice = parseFloat(formData.costPrice) || 0;
-    const selectedTax = taxRates.find((t) => t.id === formData.taxId);
-    const taxRate = selectedTax?.rate || 0;
+    const taxRate = formData.taxId === "1" ? 11 : formData.taxId === "2" ? 12 : 0;
     const taxAmount = sellingPrice * (taxRate / 100);
     const priceWithTax = sellingPrice + taxAmount;
     const margin =
       costPrice > 0 ? ((sellingPrice - costPrice) / sellingPrice) * 100 : 0;
 
-    return {
-      sellingPrice,
-      taxName: selectedTax?.name || "Tanpa PPN",
-      taxAmount,
-      priceWithTax,
-      margin,
-    };
+    return { sellingPrice, taxAmount, priceWithTax, margin };
   };
 
-  const handleSave = async () => {
-    // Validasi
+  const handleSave = () => {
     if (!formData.name.trim()) {
-      toast({
-        title: "Validasi Gagal",
-        description: "Nama produk harus diisi",
-        variant: "destructive",
-      });
+      toast.error("Validasi Gagal", { description: "Nama produk harus diisi" });
       return;
     }
 
     if (!formData.sellingPrice || parseFloat(formData.sellingPrice) <= 0) {
-      toast({
-        title: "Validasi Gagal",
+      toast.error("Validasi Gagal", {
         description: "Harga jual harus diisi dengan nilai yang valid",
-        variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
 
-    try {
-      const payload = {
-        ...formData,
-        costPrice: parseFloat(formData.costPrice) || 0,
-        sellingPrice: parseFloat(formData.sellingPrice) || 0,
-        outlets: outlets.map((o) => ({
+    upsertMutation.mutate(
+      {
+        id: productId,
+        name: formData.name,
+        sku: formData.sku,
+        barcode: formData.barcode || undefined,
+        imageUrl: formData.image || undefined,
+        description: formData.description || undefined,
+        price: parseFloat(formData.sellingPrice) || 0,
+        costPrice: parseFloat(formData.costPrice) || undefined,
+        categoryId: formData.categoryId || undefined,
+        supplierId: formData.supplierId || undefined,
+        isActive: formData.status === "active",
+        defaultDiscountPercent: parseFloat(formData.discount) || undefined,
+        promoName: formData.promoName || undefined,
+        promoPrice: parseFloat(formData.promoValue) || undefined,
+        promoStart: formData.promoStartDate
+          ? new Date(formData.promoStartDate).toISOString()
+          : undefined,
+        promoEnd: formData.promoEndDate
+          ? new Date(formData.promoEndDate).toISOString()
+          : undefined,
+        isTaxable: formData.taxId !== "" && formData.taxId !== "0",
+        taxRate: formData.taxId === "1" ? 11 : formData.taxId === "2" ? 12 : undefined,
+        minStock: product?.minStock ?? 0,
+        inventoryLines: outletStocks.map((o) => ({
           outletId: o.outletId,
-          stock: o.stock,
-          minStock: o.minStock,
+          quantity: o.stock,
         })),
-      };
-
-      console.log("Sending update payload:", payload);
-
-      const response = await fetch(`/api/products/${params.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-      console.log("Update response:", result);
-
-      if (!response.ok) {
-        throw new Error(
-          result.error || result.details || "Gagal menyimpan produk",
-        );
-      }
-
-      toast({
-        title: "Berhasil",
-        description: "Produk berhasil diperbarui",
-      });
-
-      router.push("/management/products");
-    } catch (error) {
-      console.error("Error saving product:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Terjadi kesalahan saat menyimpan produk",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDuplicate = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/products/${params.id}/duplicate`, {
-        method: "POST",
-      });
-
-      if (!response.ok) throw new Error("Gagal menduplikasi produk");
-
-      const newProduct = await response.json();
-
-      toast({
-        title: "Berhasil",
-        description: "Produk berhasil diduplikasi",
-      });
-
-      router.push(`/management/products/edit/${newProduct.id}`);
-    } catch {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat menduplikasi produk",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          router.push("/management/products");
+        },
+        onSettled: () => setLoading(false),
+      },
+    );
   };
 
   const handleArchive = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/products/${params.id}/archive`, {
+      const response = await fetch(`/api/products/${productId}/archive`, {
         method: "POST",
       });
-
       if (!response.ok) throw new Error("Gagal mengarsipkan produk");
 
-      toast({
-        title: "Berhasil",
-        description: "Produk berhasil diarsipkan",
-      });
-
+      toast.success("Produk berhasil diarsipkan");
+      void utils.products.list.invalidate();
       router.push("/management/products");
     } catch {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat mengarsipkan produk",
-        variant: "destructive",
-      });
+      toast.error("Terjadi kesalahan saat mengarsipkan produk");
     } finally {
       setLoading(false);
       setShowArchiveDialog(false);
@@ -351,31 +248,65 @@ export default function EditProductPage() {
   const handleDelete = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/products/${params.id}`, {
+      const response = await fetch(`/api/products/${productId}`, {
         method: "DELETE",
       });
-
       if (!response.ok) throw new Error("Gagal menghapus produk");
 
-      toast({
-        title: "Berhasil",
-        description: "Produk berhasil dihapus",
-      });
-
+      toast.success("Produk berhasil dihapus");
+      void utils.products.list.invalidate();
       router.push("/management/products");
     } catch {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat menghapus produk",
-        variant: "destructive",
-      });
+      toast.error("Terjadi kesalahan saat menghapus produk");
     } finally {
       setLoading(false);
       setShowDeleteDialog(false);
     }
   };
 
+  const handleDuplicate = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/products/${productId}/duplicate`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Gagal menduplikasi produk");
+
+      const newProduct = await response.json();
+      toast.success("Produk berhasil diduplikasi");
+      router.push(`/management/products/edit/${newProduct.id}`);
+    } catch {
+      toast.error("Terjadi kesalahan saat menduplikasi produk");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const summary = calculateSummary();
+
+  if (productsQuery.isLoading && !loaded) {
+    return (
+      <div className="flex items-center justify-center p-12 text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Memuat data produk...
+      </div>
+    );
+  }
+
+  if (!product && productsQuery.data) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12">
+        <p className="text-muted-foreground">Produk tidak ditemukan</p>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => router.push("/management/products")}
+        >
+          Kembali ke Produk
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -396,7 +327,7 @@ export default function EditProductPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold">
-                    Edit Produk – {formData.name}
+                    Edit Produk — {formData.name || "..."}
                   </h1>
                   <Badge
                     variant={
@@ -420,7 +351,6 @@ export default function EditProductPage() {
         </div>
       </div>
 
-      {/* Main Content - 2 Column Layout */}
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Form */}
@@ -441,8 +371,8 @@ export default function EditProductPage() {
                   />
                 </div>
 
-                <div className="flex gap-2">
-                  <div className="flex-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
                     <Label htmlFor="category">Kategori</Label>
                     <Select
                       value={formData.categoryId}
@@ -454,7 +384,7 @@ export default function EditProductPage() {
                         <SelectValue placeholder="Pilih kategori" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {categoriesQuery.data?.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             {cat.name}
                           </SelectItem>
@@ -462,10 +392,26 @@ export default function EditProductPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button variant="outline" size="sm" className="mt-8">
-                    <Plus className="h-4 w-4 mr-1" />
-                    Kategori Baru
-                  </Button>
+                  <div>
+                    <Label htmlFor="supplier">Supplier</Label>
+                    <Select
+                      value={formData.supplierId}
+                      onValueChange={(value) =>
+                        handleInputChange("supplierId", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih supplier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliersQuery.data?.map((sup) => (
+                          <SelectItem key={sup.id} value={sup.id}>
+                            {sup.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div>
@@ -535,24 +481,6 @@ export default function EditProductPage() {
                 />
 
                 <div>
-                  <Label htmlFor="unit">Satuan</Label>
-                  <Select
-                    value={formData.unit}
-                    onValueChange={(value) => handleInputChange("unit", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih satuan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="botol">Botol</SelectItem>
-                      <SelectItem value="pcs">Pcs</SelectItem>
-                      <SelectItem value="kg">Kg</SelectItem>
-                      <SelectItem value="liter">Liter</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
                   <Label>Tags (Opsional)</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {formData.tags.map((tag, idx) => (
@@ -620,17 +548,15 @@ export default function EditProductPage() {
                       <SelectValue placeholder="Pilih PPN" />
                     </SelectTrigger>
                     <SelectContent>
-                      {taxRates.map((tax) => (
-                        <SelectItem key={tax.id} value={tax.id}>
-                          {tax.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="0">Tanpa PPN</SelectItem>
+                      <SelectItem value="1">PPN 11%</SelectItem>
+                      <SelectItem value="2">PPN 12%</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label htmlFor="discount">Diskon Default (Opsional)</Label>
+                  <Label htmlFor="discount">Diskon Default % (Opsional)</Label>
                   <Input
                     id="discount"
                     type="number"
@@ -675,24 +601,7 @@ export default function EditProductPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="promoType">Tipe</Label>
-                      <Select
-                        value={formData.promoType}
-                        onValueChange={(value) =>
-                          handleInputChange("promoType", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih tipe" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percentage">Potongan %</SelectItem>
-                          <SelectItem value="fixed">Potongan Tetap</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="promoValue">Nilai</Label>
+                      <Label htmlFor="promoValue">Harga Promo</Label>
                       <Input
                         id="promoValue"
                         type="number"
@@ -700,7 +609,7 @@ export default function EditProductPage() {
                         onChange={(e) =>
                           handleInputChange("promoValue", e.target.value)
                         }
-                        placeholder="5"
+                        placeholder="4000"
                       />
                     </div>
                   </div>
@@ -734,7 +643,7 @@ export default function EditProductPage() {
             </Card>
           </div>
 
-          {/* Right Column - Stock & Summary & Quick Actions */}
+          {/* Right Column */}
           <div className="space-y-6">
             {/* Stok per Outlet */}
             <Card>
@@ -742,7 +651,7 @@ export default function EditProductPage() {
                 <CardTitle>Stok per Outlet</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {outlets.map((outlet, idx) => (
+                {outletStocks.map((outlet, idx) => (
                   <div
                     key={outlet.outletId}
                     className="space-y-2 pb-4 border-b last:border-0"
@@ -788,10 +697,11 @@ export default function EditProductPage() {
                     </div>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" className="w-full">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Tambah Outlet Lain
-                </Button>
+                {outletStocks.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Memuat stok outlet...
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -809,7 +719,13 @@ export default function EditProductPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">PPN</span>
-                  <span>{summary.taxName}</span>
+                  <span>
+                    {formData.taxId === "1"
+                      ? "PPN 11%"
+                      : formData.taxId === "2"
+                        ? "PPN 12%"
+                        : "Tanpa PPN"}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm border-t pt-2">
                   <span className="text-muted-foreground">Harga + PPN</span>
@@ -830,7 +746,7 @@ export default function EditProductPage() {
               </CardContent>
             </Card>
 
-            {/* Aksi Cepat */}
+            {/* Quick Actions */}
             <Card>
               <CardHeader>
                 <CardTitle>Aksi Cepat</CardTitle>
@@ -842,7 +758,6 @@ export default function EditProductPage() {
                   onClick={handleDuplicate}
                   disabled={loading}
                 >
-                  <Copy className="h-4 w-4 mr-2" />
                   Duplikasi Produk
                 </Button>
                 <Button
@@ -851,16 +766,14 @@ export default function EditProductPage() {
                   onClick={() => setShowArchiveDialog(true)}
                   disabled={loading}
                 >
-                  <Archive className="h-4 w-4 mr-2" />
                   Arsipkan Produk
                 </Button>
                 <Button
                   variant="outline"
-                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="w-full justify-start text-red-600 hover:bg-red-50"
                   onClick={() => setShowDeleteDialog(true)}
                   disabled={loading}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
                   Hapus Produk
                 </Button>
               </CardContent>
@@ -869,14 +782,14 @@ export default function EditProductPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Produk?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tindakan ini tidak dapat dibatalkan. Produk akan dihapus secara
-              permanen dari sistem.
+              Tindakan ini tidak dapat dibatalkan. Produk akan dihapus permanen
+              atau dinonaktifkan jika memiliki riwayat penjualan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -891,14 +804,14 @@ export default function EditProductPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Archive Confirmation Dialog */}
+      {/* Archive Dialog */}
       <AlertDialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Arsipkan Produk?</AlertDialogTitle>
             <AlertDialogDescription>
-              Produk akan diarsipkan dan tidak akan muncul di daftar aktif. Anda
-              dapat mengaktifkannya kembali nanti.
+              Produk akan dinonaktifkan dan tidak muncul di katalog kasir, tapi
+              data tetap tersimpan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

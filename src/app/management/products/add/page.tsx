@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+import { api } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,8 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronDown, Plus, Camera, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { ChevronLeft, ChevronDown, Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ProductImageUpload } from "@/components/products/product-image-upload";
 import { BarcodeField } from "@/components/products/barcode-field";
@@ -30,17 +32,22 @@ interface OutletStock {
 
 export default function AddProductPage() {
   const router = useRouter();
-  const { toast } = useToast();
+  const utils = api.useContext();
+
+  const outletsQuery = api.outlets.getUserOutlets.useQuery();
+  const categoriesQuery = api.products.categories.useQuery();
+  const suppliersQuery = api.products.suppliers.useQuery();
+
   const [loading, setLoading] = useState(false);
   const [showPromo, setShowPromo] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
+    supplierId: "",
     description: "",
     image: "",
-    status: "active",
+    status: "active" as "active" | "inactive",
     sku: "",
     barcode: "",
     unit: "",
@@ -56,27 +63,29 @@ export default function AddProductPage() {
     promoEndDate: "",
   });
 
-  const [outlets, setOutlets] = useState<OutletStock[]>([
-    { outletId: "1", outletName: "Outlet Cabang BSD", stock: 0, minStock: 0 },
-    {
-      outletId: "2",
-      outletName: "Outlet Cabang BSD (BR2)",
-      stock: 0,
-      minStock: 0,
+  const [outletStocks, setOutletStocks] = useState<OutletStock[]>([]);
+
+  // Initialize outlet stocks when data loads
+  if (outletsQuery.data && outletStocks.length === 0) {
+    setOutletStocks(
+      outletsQuery.data.map((o) => ({
+        outletId: o.outletId,
+        outletName: o.outlet.name,
+        stock: 0,
+        minStock: 0,
+      })),
+    );
+  }
+
+  const createMutation = api.products.upsert.useMutation({
+    onSuccess: () => {
+      toast.success("Produk berhasil disimpan");
+      void utils.products.list.invalidate();
     },
-  ]);
-
-  const [categories] = useState([
-    { id: "1", name: "Minuman" },
-    { id: "2", name: "Makanan" },
-    { id: "3", name: "Sembako" },
-  ]);
-
-  const [taxRates] = useState([
-    { id: "0", name: "Tanpa PPN", rate: 0 },
-    { id: "1", name: "PPN 11%", rate: 11 },
-    { id: "2", name: "PPN 12%", rate: 12 },
-  ]);
+    onError: (err) => {
+      toast.error("Gagal menyimpan produk", { description: err.message });
+    },
+  });
 
   const handleInputChange = (field: string, value: string | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -87,123 +96,113 @@ export default function AddProductPage() {
     field: "stock" | "minStock",
     value: number,
   ) => {
-    const newOutlets = [...outlets];
-    newOutlets[index][field] = value;
-    setOutlets(newOutlets);
+    setOutletStocks((prev) => {
+      const next = [...prev];
+      next[index][field] = value;
+      return next;
+    });
   };
 
   const calculateSummary = () => {
     const sellingPrice = parseFloat(formData.sellingPrice) || 0;
     const costPrice = parseFloat(formData.costPrice) || 0;
-    const selectedTax = taxRates.find((t) => t.id === formData.taxId);
-    const taxRate = selectedTax?.rate || 0;
+    const taxRate = formData.taxId === "1" ? 11 : formData.taxId === "2" ? 12 : 0;
     const taxAmount = sellingPrice * (taxRate / 100);
     const priceWithTax = sellingPrice + taxAmount;
     const margin =
       costPrice > 0 ? ((sellingPrice - costPrice) / sellingPrice) * 100 : 0;
 
-    return {
-      sellingPrice,
-      taxName: selectedTax?.name || "Tanpa PPN",
-      taxAmount,
-      priceWithTax,
-      margin,
-    };
+    return { sellingPrice, taxAmount, priceWithTax, margin };
   };
 
-  const handleSave = async (addMore: boolean = false) => {
-    // Validasi
+  const handleSave = (addMore: boolean) => {
     if (!formData.name.trim()) {
-      toast({
-        title: "Validasi Gagal",
-        description: "Nama produk harus diisi",
-        variant: "destructive",
-      });
+      toast.error("Validasi Gagal", { description: "Nama produk harus diisi" });
+      return;
+    }
+
+    if (!formData.sku.trim()) {
+      toast.error("Validasi Gagal", { description: "SKU harus diisi" });
       return;
     }
 
     if (!formData.sellingPrice || parseFloat(formData.sellingPrice) <= 0) {
-      toast({
-        title: "Validasi Gagal",
+      toast.error("Validasi Gagal", {
         description: "Harga jual harus diisi dengan nilai yang valid",
-        variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
 
-    try {
-      const response = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          costPrice: parseFloat(formData.costPrice) || 0,
-          sellingPrice: parseFloat(formData.sellingPrice) || 0,
-          outlets: outlets.map((o) => ({
-            outletId: o.outletId,
-            stock: o.stock,
-            minStock: o.minStock,
-          })),
-        }),
-      });
-
-      if (!response.ok) throw new Error("Gagal menyimpan produk");
-
-      toast({
-        title: "Berhasil",
-        description: "Produk berhasil disimpan",
-      });
-
-      if (addMore) {
-        // Reset form
-        setFormData({
-          name: "",
-          categoryId: "",
-          description: "",
-          image: "",
-          status: "active",
-          sku: "",
-          barcode: "",
-          unit: "",
-          tags: [],
-          costPrice: "",
-          sellingPrice: "",
-          taxId: "",
-          discount: "",
-          promoName: "",
-          promoType: "",
-          promoValue: "",
-          promoStartDate: "",
-          promoEndDate: "",
-        });
-        setOutlets([
-          {
-            outletId: "1",
-            outletName: "Outlet Cabang BSD",
-            stock: 0,
-            minStock: 0,
-          },
-          {
-            outletId: "2",
-            outletName: "Outlet Cabang BSD (BR2)",
-            stock: 0,
-            minStock: 0,
-          },
-        ]);
-      } else {
-        router.push("/management/products");
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat menyimpan produk",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    createMutation.mutate(
+      {
+        name: formData.name,
+        sku: formData.sku,
+        barcode: formData.barcode || undefined,
+        imageUrl: formData.image || undefined,
+        description: formData.description || undefined,
+        price: parseFloat(formData.sellingPrice) || 0,
+        costPrice: parseFloat(formData.costPrice) || undefined,
+        categoryId: formData.categoryId || undefined,
+        supplierId: formData.supplierId || undefined,
+        isActive: formData.status === "active",
+        defaultDiscountPercent: parseFloat(formData.discount) || undefined,
+        promoName: formData.promoName || undefined,
+        promoPrice: parseFloat(formData.promoValue) || undefined,
+        promoStart: formData.promoStartDate
+          ? new Date(formData.promoStartDate).toISOString()
+          : undefined,
+        promoEnd: formData.promoEndDate
+          ? new Date(formData.promoEndDate).toISOString()
+          : undefined,
+        isTaxable: formData.taxId !== "" && formData.taxId !== "0",
+        taxRate: formData.taxId === "1" ? 11 : formData.taxId === "2" ? 12 : undefined,
+        minStock: 0,
+        inventoryLines: outletStocks.map((o) => ({
+          outletId: o.outletId,
+          quantity: o.stock,
+        })),
+      },
+      {
+        onSuccess: () => {
+          if (addMore) {
+            setFormData({
+              name: "",
+              categoryId: "",
+              supplierId: "",
+              description: "",
+              image: "",
+              status: "active",
+              sku: "",
+              barcode: "",
+              unit: "",
+              tags: [],
+              costPrice: "",
+              sellingPrice: "",
+              taxId: "",
+              discount: "",
+              promoName: "",
+              promoType: "",
+              promoValue: "",
+              promoStartDate: "",
+              promoEndDate: "",
+            });
+            setOutletStocks(
+              (outletsQuery.data ?? []).map((o) => ({
+                outletId: o.outletId,
+                outletName: o.outlet.name,
+                stock: 0,
+                minStock: 0,
+              })),
+            );
+          } else {
+            router.push("/management/products");
+          }
+        },
+        onSettled: () => setLoading(false),
+      },
+    );
   };
 
   const summary = calculateSummary();
@@ -248,7 +247,6 @@ export default function AddProductPage() {
         </div>
       </div>
 
-      {/* Main Content - 2 Column Layout */}
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Form */}
@@ -269,8 +267,8 @@ export default function AddProductPage() {
                   />
                 </div>
 
-                <div className="flex gap-2">
-                  <div className="flex-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
                     <Label htmlFor="category">Kategori</Label>
                     <Select
                       value={formData.categoryId}
@@ -282,7 +280,7 @@ export default function AddProductPage() {
                         <SelectValue placeholder="Pilih kategori" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {categoriesQuery.data?.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             {cat.name}
                           </SelectItem>
@@ -290,10 +288,26 @@ export default function AddProductPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button variant="outline" size="sm" className="mt-8">
-                    <Plus className="h-4 w-4 mr-1" />
-                    Kategori Baru
-                  </Button>
+                  <div>
+                    <Label htmlFor="supplier">Supplier</Label>
+                    <Select
+                      value={formData.supplierId}
+                      onValueChange={(value) =>
+                        handleInputChange("supplierId", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih supplier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliersQuery.data?.map((sup) => (
+                          <SelectItem key={sup.id} value={sup.id}>
+                            {sup.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div>
@@ -346,7 +360,7 @@ export default function AddProductPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="sku">SKU</Label>
+                  <Label htmlFor="sku">SKU *</Label>
                   <Input
                     id="sku"
                     value={formData.sku}
@@ -361,24 +375,6 @@ export default function AddProductPage() {
                   productName={formData.name}
                   sku={formData.sku}
                 />
-
-                <div>
-                  <Label htmlFor="unit">Satuan</Label>
-                  <Select
-                    value={formData.unit}
-                    onValueChange={(value) => handleInputChange("unit", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih satuan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="botol">Botol</SelectItem>
-                      <SelectItem value="pcs">Pcs</SelectItem>
-                      <SelectItem value="kg">Kg</SelectItem>
-                      <SelectItem value="liter">Liter</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
 
                 <div>
                   <Label>Tags (Opsional)</Label>
@@ -448,17 +444,15 @@ export default function AddProductPage() {
                       <SelectValue placeholder="Pilih PPN" />
                     </SelectTrigger>
                     <SelectContent>
-                      {taxRates.map((tax) => (
-                        <SelectItem key={tax.id} value={tax.id}>
-                          {tax.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="0">Tanpa PPN</SelectItem>
+                      <SelectItem value="1">PPN 11%</SelectItem>
+                      <SelectItem value="2">PPN 12%</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label htmlFor="discount">Diskon Default (Opsional)</Label>
+                  <Label htmlFor="discount">Diskon Default % (Opsional)</Label>
                   <Input
                     id="discount"
                     type="number"
@@ -503,24 +497,7 @@ export default function AddProductPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="promoType">Tipe</Label>
-                      <Select
-                        value={formData.promoType}
-                        onValueChange={(value) =>
-                          handleInputChange("promoType", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih tipe" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percentage">Potongan %</SelectItem>
-                          <SelectItem value="fixed">Potongan Tetap</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="promoValue">Nilai</Label>
+                      <Label htmlFor="promoValue">Harga Promo</Label>
                       <Input
                         id="promoValue"
                         type="number"
@@ -528,7 +505,7 @@ export default function AddProductPage() {
                         onChange={(e) =>
                           handleInputChange("promoValue", e.target.value)
                         }
-                        placeholder="5"
+                        placeholder="4000"
                       />
                     </div>
                   </div>
@@ -570,7 +547,7 @@ export default function AddProductPage() {
                 <CardTitle>Stok per Outlet</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {outlets.map((outlet, idx) => (
+                {outletStocks.map((outlet, idx) => (
                   <div
                     key={outlet.outletId}
                     className="space-y-2 pb-4 border-b last:border-0"
@@ -616,10 +593,11 @@ export default function AddProductPage() {
                     </div>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" className="w-full">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Tambah Outlet Lain
-                </Button>
+                {outletStocks.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Memuat outlet...
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -637,7 +615,13 @@ export default function AddProductPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">PPN</span>
-                  <span>{summary.taxName}</span>
+                  <span>
+                    {formData.taxId === "1"
+                      ? "PPN 11%"
+                      : formData.taxId === "2"
+                        ? "PPN 12%"
+                        : "Tanpa PPN"}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm border-t pt-2">
                   <span className="text-muted-foreground">Harga + PPN</span>
@@ -648,7 +632,7 @@ export default function AddProductPage() {
                 {formData.costPrice && (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">
-                      Margin Kotor (estimasi)
+                      Margin Koto (estimasi)
                     </span>
                     <span className="font-medium text-green-600">
                       {summary.margin.toFixed(1)}%

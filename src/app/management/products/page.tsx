@@ -20,6 +20,16 @@ import {
   type ProductTableRow,
 } from "@/components/products/premium-product-table";
 import { TableToolbar } from "@/components/products/table-toolbar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import { api } from "@/trpc/client";
 import { useOutlet } from "@/lib/outlet-context";
@@ -52,6 +62,12 @@ export default function ProductManagementPage() {
   );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [minStockDialog, setMinStockDialog] = useState<{
+    productId: string;
+    productName: string;
+    currentMinStock: number;
+  } | null>(null);
+  const [minStockValue, setMinStockValue] = useState("");
 
   // API Queries
   const productsQuery = api.products.list.useQuery({ search: filters.search });
@@ -71,23 +87,28 @@ export default function ProductManagementPage() {
   // Get all inventory data for current outlet
   const inventoryQuery = api.inventory.getAllInventory.useQuery(
     { outletId: currentOutlet?.id ?? "" },
-    { 
-      enabled: Boolean(currentOutlet?.id), 
+    {
+      enabled: Boolean(currentOutlet?.id),
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
     },
   );
 
-  // Debug logging
-  console.log("🔍 DEBUG - Current Outlet:", currentOutlet);
-  console.log("🔍 DEBUG - Inventory Query Status:", {
-    isLoading: inventoryQuery.isLoading,
-    isError: inventoryQuery.isError,
-    error: inventoryQuery.error,
-    dataLength: inventoryQuery.data?.length ?? 0,
+  const setMinStockMutation = api.inventory.setProductMinStock.useMutation({
+    onSuccess: () => {
+      toast.success("Minimum stok berhasil diperbarui");
+      void utils.products.list.invalidate();
+      void utils.inventory.listLowStock.invalidate();
+      setMinStockDialog(null);
+      setMinStockValue("");
+    },
+    onError: (err) => {
+      toast.error("Gagal memperbarui min stock", { description: err.message });
+    },
   });
-  console.log("🔍 DEBUG - Inventory Data:", inventoryQuery.data);
+
+  const utils = api.useContext();
 
   const products = useMemo(
     () => productsQuery.data ?? [],
@@ -112,7 +133,6 @@ export default function ProductManagementPage() {
     (inventoryQuery.data ?? []).forEach((inv) => {
       map.set(inv.productId, inv.quantity);
     });
-    console.log("🔍 DEBUG - Inventory Map:", Array.from(map.entries()));
     return map;
   }, [inventoryQuery.data]);
 
@@ -123,20 +143,9 @@ export default function ProductManagementPage() {
 
   // Transform products to table rows
   const tableRows = useMemo((): ProductTableRow[] => {
-    console.log("🔍 DEBUG - Building table rows...");
-    console.log("🔍 DEBUG - Products count:", products.length);
-    console.log("🔍 DEBUG - Inventory map size:", inventoryMap.size);
-
     const rows = products.map((product) => {
       const isLowStock = lowStockProductIds.has(product.id);
-      // Get actual stock from inventory map
       const totalStock = inventoryMap.get(product.id) ?? 0;
-
-      if (products.indexOf(product) < 3) {
-        console.log(
-          `🔍 DEBUG - Product: ${product.name}, ID: ${product.id}, Stock: ${totalStock}`,
-        );
-      }
 
       return {
         id: product.id,
@@ -161,10 +170,6 @@ export default function ProductManagementPage() {
       };
     });
 
-    console.log(
-      "🔍 DEBUG - First 3 rows stock values:",
-      rows.slice(0, 3).map((r) => ({ name: r.name, stock: r.stock })),
-    );
     return rows;
   }, [products, lowStockProductIds, inventoryMap]);
 
@@ -235,7 +240,7 @@ export default function ProductManagementPage() {
         description: undefined,
         sku: product.sku,
         barcode: product.barcode || undefined,
-        unit: "Pcs", // TODO: Get from product
+        unit: "Pcs",
         price: product.price,
         costPrice: product.costPrice || 0,
         taxType: product.isTaxable
@@ -247,11 +252,13 @@ export default function ProductManagementPage() {
             )
           : 0,
         isActive: product.isActive,
-        imageUrl: undefined,
+        imageUrl: product.imageUrl ?? undefined,
         promo: product.promoName
           ? {
               name: product.promoName,
-              discount: 5, // TODO: Get from promo
+              discount: product.defaultDiscountPercent
+                ? Number(product.defaultDiscountPercent)
+                : 0,
               startDate: product.promoStart || new Date().toISOString(),
               endDate: product.promoEnd || new Date().toISOString(),
             }
@@ -267,7 +274,7 @@ export default function ProductManagementPage() {
               },
             ]
           : [],
-        recentMovements: [], // TODO: Add real movements
+        recentMovements: [],
       };
 
       setSelectedProduct(productDetail);
@@ -280,22 +287,82 @@ export default function ProductManagementPage() {
     router.push(`/management/products/edit/${product.id}`);
   };
 
-  const handleDuplicate = () => {
-    toast.info("Fitur duplikasi akan segera hadir");
+  const handleDuplicate = async (product: ProductDetail | ProductTableRow) => {
+    try {
+      const response = await fetch(`/api/products/${product.id}/duplicate`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Gagal menduplikasi produk");
+
+      toast.success("Produk berhasil diduplikasi");
+      void utils.products.list.invalidate();
+    } catch {
+      toast.error("Terjadi kesalahan saat menduplikasi produk");
+    }
     setIsDrawerOpen(false);
   };
 
-  const handleArchive = () => {
-    toast.info("Fitur arsip akan segera hadir");
+  const handleArchive = async (product: ProductDetail | ProductTableRow) => {
+    try {
+      const response = await fetch(`/api/products/${product.id}/archive`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Gagal mengarsipkan produk");
+
+      toast.success("Produk berhasil diarsipkan");
+      void utils.products.list.invalidate();
+    } catch {
+      toast.error("Terjadi kesalahan saat mengarsipkan produk");
+    }
     setIsDrawerOpen(false);
   };
 
-  const handleDelete = () => {
-    toast.error("Fitur hapus akan segera hadir");
+  const handleDelete = async (product: ProductDetail | ProductTableRow) => {
+    try {
+      const response = await fetch(`/api/products/${product.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Gagal menghapus produk");
+
+      toast.success("Produk berhasil dihapus");
+      void utils.products.list.invalidate();
+    } catch {
+      toast.error("Terjadi kesalahan saat menghapus produk");
+    }
   };
 
-  const handleSetMinStock = () => {
-    toast.info("Dialog pengaturan min stock akan segera hadir");
+  const handleSetMinStock = (product: ProductDetail | ProductTableRow) => {
+    const fullProduct = products.find((p) => p.id === product.id);
+    setMinStockDialog({
+      productId: product.id,
+      productName: product.name,
+      currentMinStock: fullProduct?.minStock ?? 0,
+    });
+    setMinStockValue(String(fullProduct?.minStock ?? 0));
+  };
+
+  const handleSetMinStockFromDrawer = (outletId: string, productId: string) => {
+    const fullProduct = products.find((p) => p.id === productId);
+    setMinStockDialog({
+      productId,
+      productName: fullProduct?.name ?? "Produk",
+      currentMinStock: fullProduct?.minStock ?? 0,
+    });
+    setMinStockValue(String(fullProduct?.minStock ?? 0));
+    void outletId; // minStock is product-global, not per-outlet
+  };
+
+  const handleSubmitMinStock = () => {
+    if (!minStockDialog) return;
+    const value = parseInt(minStockValue, 10);
+    if (isNaN(value) || value < 0) {
+      toast.error("Nilai minimal 0");
+      return;
+    }
+    setMinStockMutation.mutate({
+      productId: minStockDialog.productId,
+      minStock: value,
+    });
   };
 
   const handleViewStockHistory = (productId: string) => {
@@ -307,8 +374,29 @@ export default function ProductManagementPage() {
   };
 
   const handleExportCSV = () => {
-    // TODO: Implement CSV export
-    toast.info("Ekspor CSV akan segera hadir");
+    const headers = ["Name", "SKU", "Category", "Price", "Stock", "Supplier", "Status"];
+    const rows = filteredProducts.map((p) => [
+      p.name,
+      p.sku,
+      p.category,
+      p.price.toString(),
+      p.stock.toString(),
+      p.supplier ?? "",
+      p.status,
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "products-export.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV berhasil diekspor");
   };
 
   const handleAddProduct = () => {
@@ -402,7 +490,7 @@ export default function ProductManagementPage() {
         onDuplicate={handleDuplicate}
         onArchive={handleArchive}
         onDelete={handleDelete}
-        onSetMinStock={() => handleSetMinStock()}
+        onSetMinStock={handleSetMinStockFromDrawer}
         onViewStockHistory={handleViewStockHistory}
         onRescanBarcode={() => handleRescanBarcode()}
       />
@@ -416,6 +504,57 @@ export default function ProductManagementPage() {
         categories={categories}
         suppliers={suppliers}
       />
+
+      {/* Set Min Stock Dialog */}
+      <Dialog
+        open={minStockDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMinStockDialog(null);
+            setMinStockValue("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Atur Minimum Stok</DialogTitle>
+            <DialogDescription>
+              {minStockDialog?.productName} — produk akan ditandai low stock
+              jika stok turun di bawah nilai ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label htmlFor="min-stock-input">Minimum Stok</Label>
+            <Input
+              id="min-stock-input"
+              type="number"
+              min={0}
+              value={minStockValue}
+              onChange={(e) => setMinStockValue(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Saat ini: {minStockDialog?.currentMinStock ?? 0} unit
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMinStockDialog(null);
+                setMinStockValue("");
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleSubmitMinStock}
+              disabled={setMinStockMutation.isPending}
+            >
+              {setMinStockMutation.isPending ? "Menyimpan..." : "Simpan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

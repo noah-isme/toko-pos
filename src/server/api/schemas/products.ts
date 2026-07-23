@@ -85,6 +85,14 @@ export const productUpsertInputSchema = z.object({
     .max(100, { message: "Tarif PPN maksimal 100%" })
     .optional(),
   minStock: z.number().int().min(0).default(0),
+  inventoryLines: z
+    .array(
+      z.object({
+        outletId: z.string().min(1),
+        quantity: z.number().int().min(0).default(0),
+      }),
+    )
+    .optional(),
 });
 
 export const productUpsertOutputSchema = z.object({

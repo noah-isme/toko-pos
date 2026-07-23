@@ -369,6 +369,15 @@ export function SiteHeader({ className }: { className?: string }) {
                     </Link>
                   </DropdownMenuItem>
                 )}
+                {(session?.user?.role === "OWNER" ||
+                  session?.user?.role === "ADMIN") && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/management/shift-history">
+                      <Clock className="mr-2 h-4 w-4" />
+                      Riwayat Shift
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {
