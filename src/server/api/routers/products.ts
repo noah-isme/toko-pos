@@ -47,10 +47,12 @@ const mapMovement = (movement: {
   note: string | null;
   reference: string | null;
   occurredAt: Date;
-  inventory: { outlet: { name: string } };
+  inventory: { outlet: { name: string }; product: { id: string; name: string } };
   createdBy: { name: string | null } | null;
 }) => ({
   id: movement.id,
+  productId: movement.inventory.product.id,
+  productName: movement.inventory.product.name,
   type: movement.type,
   quantity: movement.quantity,
   note: movement.note,
@@ -152,14 +154,29 @@ export const productsRouter = router({
       const movements = await db.stockMovement.findMany({
         where: {
           inventory: {
-            productId: input.productId,
+            ...(input.productId
+              ? { productId: input.productId }
+              : {}),
             ...outletWhere,
+            ...(input.outletId ? { outletId: input.outletId } : {}),
           },
+          ...(input.types?.length ? { type: { in: input.types } } : {}),
+          ...(input.dateFrom || input.dateTo
+            ? {
+                occurredAt: {
+                  ...(input.dateFrom ? { gte: input.dateFrom } : {}),
+                  ...(input.dateTo ? { lte: input.dateTo } : {}),
+                },
+              }
+            : {}),
         },
         include: {
           inventory: {
             include: {
               outlet: true,
+              product: {
+                select: { id: true, name: true },
+              },
             },
           },
           createdBy: {
@@ -242,6 +259,9 @@ export const productsRouter = router({
             inventory: {
               include: {
                 outlet: true,
+                product: {
+                  select: { id: true, name: true },
+                },
               },
             },
             createdBy: {

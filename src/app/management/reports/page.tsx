@@ -1,8 +1,15 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import {
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+  startOfMonth,
+  format,
+  differenceInHours,
+} from "date-fns";
 import { Button } from "@/components/ui/button";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -26,127 +33,112 @@ import {
   Download,
   FileText,
   TrendingUp,
+  TrendingDown,
+  Minus,
   ShoppingCart,
   Package,
   DollarSign,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
+import { api } from "@/trpc/client";
 
-interface DailySales {
-  date: string;
-  sales: number;
-  transactions: number;
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+
+function getPeriodRange(period: string) {
+  const now = new Date();
+  switch (period) {
+    case "today":
+      return { from: startOfDay(now), to: endOfDay(now), granularity: "hour" as const };
+    case "month":
+      return { from: startOfMonth(now), to: endOfDay(now), granularity: "day" as const };
+    default:
+      return { from: startOfWeek(now), to: endOfDay(now), granularity: "day" as const };
+  }
 }
 
-interface TopItem {
-  name: string;
-  quantity: number;
-  revenue: number;
+function TrendIndicator({ trend }: { trend?: { value: number; direction: string } }) {
+  if (!trend) return null;
+  const isUp = trend.direction === "up";
+  const isDown = trend.direction === "down";
+  const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
+  const colorClass = isUp
+    ? "text-green-600"
+    : isDown
+      ? "text-red-600"
+      : "text-gray-500";
+  const sign = isUp ? "+" : isDown ? "" : "";
+  return (
+    <div className={`mt-3 flex items-center text-xs ${colorClass}`}>
+      <Icon className="mr-1 h-3 w-3" />
+      <span>
+        {sign}
+        {trend.value.toFixed(1)}% dari periode sebelumnya
+      </span>
+    </div>
+  );
 }
-
-interface ShiftData {
-  shift: string;
-  timeRange: string;
-  duration: string;
-  sales: number;
-  items: number;
-  transactions: number;
-}
-
-// Mock data
-const dailySalesData: DailySales[] = [
-  { date: "28 Nov", sales: 2800000, transactions: 95 },
-  { date: "29 Nov", sales: 3200000, transactions: 110 },
-  { date: "30 Nov", sales: 2950000, transactions: 102 },
-  { date: "01 Des", sales: 3450000, transactions: 125 },
-  { date: "02 Des", sales: 3560000, transactions: 128 },
-];
-
-const topItemsData: TopItem[] = [
-  { name: "Air Mineral 600ml", quantity: 45, revenue: 225000 },
-  { name: "Beras Premium 5kg", quantity: 22, revenue: 1540000 },
-  { name: "Kopi Bubuk 200g", quantity: 18, revenue: 360000 },
-  { name: "Gula Pasir 1kg", quantity: 16, revenue: 240000 },
-  { name: "Minyak Goreng 2L", quantity: 14, revenue: 420000 },
-];
-
-const shiftData: ShiftData[] = [
-  {
-    shift: "Shift Ani",
-    timeRange: "08:00 – 11:00",
-    duration: "3 jam",
-    sales: 780000,
-    items: 65,
-    transactions: 28,
-  },
-  {
-    shift: "Shift Budi",
-    timeRange: "11:00 – 15:00",
-    duration: "4 jam",
-    sales: 1200000,
-    items: 110,
-    transactions: 45,
-  },
-  {
-    shift: "Shift Sore",
-    timeRange: "15:00 – 20:00",
-    duration: "5 jam",
-    sales: 980000,
-    items: 92,
-    transactions: 38,
-  },
-  {
-    shift: "Shift Malam",
-    timeRange: "20:00 – 22:00",
-    duration: "2 jam",
-    sales: 600000,
-    items: 111,
-    transactions: 17,
-  },
-];
 
 export default function ReportsPage() {
-  const [selectedOutlet, setSelectedOutlet] = useState<string>("BSD");
+  const [selectedOutlet, setSelectedOutlet] = useState<string>("all");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("week");
 
-  // Calculate metrics
-  const metrics = useMemo(() => {
-    const totalSales = dailySalesData.reduce((sum, day) => sum + day.sales, 0);
-    const totalTransactions = dailySalesData.reduce(
-      (sum, day) => sum + day.transactions,
-      0,
-    );
-    const totalItems = topItemsData.reduce(
-      (sum, item) => sum + item.quantity,
-      0,
-    );
-    const avgPerTransaction = totalSales / totalTransactions;
+  const periodRange = useMemo(
+    () => getPeriodRange(selectedPeriod),
+    [selectedPeriod],
+  );
 
-    return {
-      totalSales,
-      totalTransactions,
-      totalItems,
-      avgPerTransaction,
-    };
-  }, []);
+  const outletId = selectedOutlet === "all" ? undefined : selectedOutlet;
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+  const outletsQuery = api.outlets.list.useQuery();
+  const kpiQuery = api.analytics.getKpiSummary.useQuery(
+    { outletId, dateRange: periodRange, compareWithPrevious: true },
+    { refetchOnWindowFocus: false },
+  );
+  const salesTrendQuery = api.analytics.getSalesTrend.useQuery(
+    { outletId, dateRange: periodRange, granularity: periodRange.granularity },
+    { refetchOnWindowFocus: false },
+  );
+  const topProductsQuery = api.analytics.getTopProducts.useQuery(
+    { outletId, dateRange: periodRange, limit: 10 },
+    { refetchOnWindowFocus: false },
+  );
+  const shiftQuery = api.analytics.getShiftActivity.useQuery(
+    { outletId, date: new Date() },
+    { refetchOnWindowFocus: false },
+  );
+
+  const chartData = useMemo(() => {
+    return (salesTrendQuery.data ?? []).map((point) => {
+      const date = new Date(point.timestamp);
+      return {
+        date:
+          periodRange.granularity === "hour"
+            ? format(date, "HH:mm")
+            : format(date, "dd MMM"),
+        sales: point.sales,
+        transactions: point.transactions,
+      };
+    });
+  }, [salesTrendQuery.data, periodRange.granularity]);
 
   const exportPDF = () => {
     console.log("Export PDF clicked");
-    // Implementation for PDF export
   };
 
   const exportCSV = () => {
     console.log("Export CSV clicked");
-    // Implementation for CSV export
   };
+
+  const kpi = kpiQuery.data;
+  const isLoading = kpiQuery.isLoading;
+  const isError = kpiQuery.isError;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,13 +156,16 @@ export default function ReportsPage() {
             {/* Filters & Actions */}
             <div className="flex flex-wrap items-center gap-3">
               <Select value={selectedOutlet} onValueChange={setSelectedOutlet}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Pilih outlet" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="BSD">BSD</SelectItem>
-                  <SelectItem value="BR2">BR2</SelectItem>
-                  <SelectItem value="Gudang Pusat">Gudang Pusat</SelectItem>
+                  <SelectItem value="all">Semua Outlet</SelectItem>
+                  {outletsQuery.data?.map((outlet) => (
+                    <SelectItem key={outlet.id} value={outlet.id}>
+                      {outlet.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
@@ -182,7 +177,6 @@ export default function ReportsPage() {
                   <SelectItem value="today">Hari Ini</SelectItem>
                   <SelectItem value="week">Minggu Ini</SelectItem>
                   <SelectItem value="month">Bulan Ini</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -200,6 +194,15 @@ export default function ReportsPage() {
       </div>
 
       <div className="container mx-auto px-4 py-6 space-y-6">
+        {isError && (
+          <Card>
+            <CardContent className="flex h-32 flex-col items-center justify-center gap-2">
+              <AlertCircle className="h-6 w-6 text-red-500" />
+              <p className="text-muted-foreground">Gagal memuat data laporan</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Top Metrics Cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -210,17 +213,18 @@ export default function ReportsPage() {
                     Total Penjualan
                   </p>
                   <h3 className="text-2xl font-bold mt-2">
-                    {formatCurrency(metrics.totalSales)}
+                    {isLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      formatCurrency(kpi?.totalSales.current ?? 0)
+                    )}
                   </h3>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
                   <DollarSign className="h-6 w-6 text-green-600" />
                 </div>
               </div>
-              <div className="mt-3 flex items-center text-xs text-green-600">
-                <TrendingUp className="mr-1 h-3 w-3" />
-                <span>+12.5% dari periode sebelumnya</span>
-              </div>
+              {kpi && <TrendIndicator trend={kpi.totalSales.trend} />}
             </CardContent>
           </Card>
 
@@ -232,17 +236,18 @@ export default function ReportsPage() {
                     Total Transaksi
                   </p>
                   <h3 className="text-2xl font-bold mt-2">
-                    {metrics.totalTransactions}
+                    {isLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      kpi?.totalTransactions.current ?? 0
+                    )}
                   </h3>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
                   <ShoppingCart className="h-6 w-6 text-blue-600" />
                 </div>
               </div>
-              <div className="mt-3 flex items-center text-xs text-blue-600">
-                <TrendingUp className="mr-1 h-3 w-3" />
-                <span>+8.3% dari periode sebelumnya</span>
-              </div>
+              {kpi && <TrendIndicator trend={kpi.totalTransactions.trend} />}
             </CardContent>
           </Card>
 
@@ -254,17 +259,18 @@ export default function ReportsPage() {
                     Item Terjual
                   </p>
                   <h3 className="text-2xl font-bold mt-2">
-                    {metrics.totalItems} item
+                    {isLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      `${kpi?.itemsSold.current ?? 0} item`
+                    )}
                   </h3>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
                   <Package className="h-6 w-6 text-purple-600" />
                 </div>
               </div>
-              <div className="mt-3 flex items-center text-xs text-purple-600">
-                <TrendingUp className="mr-1 h-3 w-3" />
-                <span>+15.2% dari periode sebelumnya</span>
-              </div>
+              {kpi && <TrendIndicator trend={kpi.itemsSold.trend} />}
             </CardContent>
           </Card>
 
@@ -276,17 +282,20 @@ export default function ReportsPage() {
                     Rata-rata / Transaksi
                   </p>
                   <h3 className="text-2xl font-bold mt-2">
-                    {formatCurrency(metrics.avgPerTransaction)}
+                    {isLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      formatCurrency(kpi?.averageTransactionValue.current ?? 0)
+                    )}
                   </h3>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
-                  <TrendingUp className="h-6 w-6 text-orange-600" />
+                  <DollarSign className="h-6 w-6 text-orange-600" />
                 </div>
               </div>
-              <div className="mt-3 flex items-center text-xs text-orange-600">
-                <TrendingUp className="mr-1 h-3 w-3" />
-                <span>+3.7% dari periode sebelumnya</span>
-              </div>
+              {kpi && (
+                <TrendIndicator trend={kpi.averageTransactionValue.trend} />
+              )}
             </CardContent>
           </Card>
         </div>
@@ -299,38 +308,48 @@ export default function ReportsPage() {
               <CardTitle>Grafik Penjualan Harian</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={dailySalesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12 }}
-                    stroke="#888888"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    stroke="#888888"
-                    tickFormatter={(value: number) => {
-                      if (value >= 1000000) return `${value / 1000000}jt`;
-                      if (value >= 1000) return `${value / 1000}rb`;
-                      return value.toString();
-                    }}
-                  />
-                  <Tooltip
-                    formatter={(value) => [
-                      formatCurrency(Number(value)),
-                      "Penjualan",
-                    ]}
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                    }}
-                  />
-                  <Bar dataKey="sales" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {salesTrendQuery.isLoading ? (
+                <div className="flex h-[300px] items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : chartData.length === 0 ? (
+                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                  Tidak ada data penjualan pada periode ini
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 12 }}
+                      stroke="#888888"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12 }}
+                      stroke="#888888"
+                      tickFormatter={(value: number) => {
+                        if (value >= 1000000) return `${value / 1000000}jt`;
+                        if (value >= 1000) return `${value / 1000}rb`;
+                        return value.toString();
+                      }}
+                    />
+                    <Tooltip
+                      formatter={(value) => [
+                        formatCurrency(Number(value)),
+                        "Penjualan",
+                      ]}
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        fontSize: "14px",
+                      }}
+                    />
+                    <Bar dataKey="sales" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -340,32 +359,42 @@ export default function ReportsPage() {
               <CardTitle>Tren Transaksi Harian</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={dailySalesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12 }}
-                    stroke="#888888"
-                  />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#888888" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="transactions"
-                    stroke="#10b981"
-                    strokeWidth={3}
-                    dot={{ fill: "#10b981", r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {salesTrendQuery.isLoading ? (
+                <div className="flex h-[300px] items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : chartData.length === 0 ? (
+                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                  Tidak data transaksi pada periode ini
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 12 }}
+                      stroke="#888888"
+                    />
+                    <YAxis tick={{ fontSize: 12 }} stroke="#888888" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "white",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        fontSize: "14px",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="transactions"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      dot={{ fill: "#10b981", r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -378,31 +407,43 @@ export default function ReportsPage() {
               <CardTitle>Item Terlaris</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {topItemsData.map((item, index) => (
-                  <div
-                    key={item.name}
-                    className="flex items-center justify-between rounded-lg border bg-gray-50 p-3 transition-colors hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-600">
-                        {index + 1}
+              {topProductsQuery.isLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (topProductsQuery.data ?? []).length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-muted-foreground">
+                  Belum ada penjualan pada periode ini
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(topProductsQuery.data ?? []).map((item, index) => (
+                    <div
+                      key={item.productId}
+                      className="flex items-center justify-between rounded-lg border bg-gray-50 p-3 transition-colors hover:bg-gray-100"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-600">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm">
+                            {item.productName}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatCurrency(item.revenue)}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-medium text-sm">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatCurrency(item.revenue)}
+                      <div className="text-right">
+                        <div className="font-bold text-sm">
+                          {item.quantity} terjual
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-sm">
-                        {item.quantity} terjual
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -412,40 +453,68 @@ export default function ReportsPage() {
               <CardTitle>Analisis Per Shift</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {shiftData.map((shift) => (
-                  <div
-                    key={shift.shift}
-                    className="rounded-lg border bg-gray-50 p-4 transition-colors hover:bg-gray-100"
-                  >
-                    <div className="mb-3 flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold text-sm">{shift.shift}</h4>
-                        <p className="text-xs text-muted-foreground">
-                          {shift.timeRange} • {shift.duration}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-sm text-green-600">
-                          {formatCurrency(shift.sales)}
+              {shiftQuery.isLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (shiftQuery.data ?? []).length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-muted-foreground">
+                  Belum ada data shift hari ini
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(shiftQuery.data ?? []).map((shift) => {
+                    const open = new Date(shift.openTime);
+                    const close = shift.closeTime
+                      ? new Date(shift.closeTime)
+                      : new Date();
+                    const duration = differenceInHours(close, open);
+                    const timeRange = `${format(open, "HH:mm")} – ${shift.closeTime ? format(close, "HH:mm") : "..."}`;
+
+                    return (
+                      <div
+                        key={shift.sessionId}
+                        className="rounded-lg border bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-sm">
+                              {shift.cashierName}
+                            </h4>
+                            <p className="text-xs text-muted-foreground">
+                              {timeRange} • {duration} jam •{" "}
+                              {shift.status === "active" ? "Aktif" : "Tutup"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-sm text-green-600">
+                              {formatCurrency(shift.totalSales)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="rounded bg-white p-2 text-center">
+                            <div className="text-muted-foreground">
+                              Transaksi
+                            </div>
+                            <div className="font-bold mt-1">
+                              {shift.totalTransactions}
+                            </div>
+                          </div>
+                          <div className="rounded bg-white p-2 text-center">
+                            <div className="text-muted-foreground">
+                              Kas Buka
+                            </div>
+                            <div className="font-bold mt-1">
+                              {formatCurrency(shift.openingCash)}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="rounded bg-white p-2 text-center">
-                        <div className="text-muted-foreground">Item</div>
-                        <div className="font-bold mt-1">{shift.items}</div>
-                      </div>
-                      <div className="rounded bg-white p-2 text-center">
-                        <div className="text-muted-foreground">Transaksi</div>
-                        <div className="font-bold mt-1">
-                          {shift.transactions}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

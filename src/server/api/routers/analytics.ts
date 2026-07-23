@@ -85,6 +85,20 @@ const categoryBreakdownOutputSchema = z.array(
   }),
 );
 
+// Top Products Schemas
+const topProductsInputSchema = outletFilterSchema.extend({
+  limit: z.number().int().min(1).max(50).default(10),
+});
+
+const topProductsOutputSchema = z.array(
+  z.object({
+    productId: z.string(),
+    productName: z.string(),
+    quantity: z.number(),
+    revenue: z.number(),
+  }),
+);
+
 // Payment Method Breakdown Schemas
 const paymentMethodBreakdownInputSchema = outletFilterSchema;
 
@@ -641,6 +655,63 @@ export const analyticsRouter = router({
               : 0,
         }))
         .sort((a, b) => b.sales - a.sales);
+    }),
+
+  /**
+   * Get Top Products
+   * Returns best-selling products by quantity and revenue
+   */
+  getTopProducts: protectedOutletProcedure
+    .input(topProductsInputSchema)
+    .output(topProductsOutputSchema)
+    .query(async ({ input, ctx }) => {
+      const { outletId, dateRange, limit } = input;
+      const { role, outletIds } = getOutletAccessFromContext(ctx);
+      const outletWhere = buildOutletWhere(role, outletIds, outletId);
+
+      const saleItems = await db.saleItem.findMany({
+        where: {
+          sale: {
+            ...outletWhere,
+            status: SaleStatus.COMPLETED,
+            soldAt: {
+              gte: dateRange.from,
+              lte: dateRange.to,
+            },
+          },
+        },
+        include: {
+          product: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      const productMap = new Map<
+        string,
+        { productName: string; quantity: number; revenue: number }
+      >();
+
+      saleItems.forEach((item) => {
+        const existing = productMap.get(item.productId) || {
+          productName: item.product.name,
+          quantity: 0,
+          revenue: 0,
+        };
+        existing.quantity += item.quantity;
+        existing.revenue += Number(item.total);
+        productMap.set(item.productId, existing);
+      });
+
+      return Array.from(productMap.entries())
+        .map(([productId, data]) => ({
+          productId,
+          productName: data.productName,
+          quantity: data.quantity,
+          revenue: formatCurrency(data.revenue),
+        }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, limit);
     }),
 
   /**
