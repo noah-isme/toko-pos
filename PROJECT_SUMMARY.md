@@ -206,15 +206,13 @@ TaxSetting (Pengaturan PPN)
 **User Story**: Sebagai owner, saya ingin melihat performa penjualan
 
 **Fitur**:
-- ✅ Laporan harian (daily summary)
-- ✅ Total penjualan per hari
-- ✅ Jumlah transaksi & total item
+- ✅ Laporan harian, bulanan, dan tahunan dengan filter periode & outlet
+- ✅ Total penjualan, jumlah transaksi, item terjual, dan rata-rata per transaksi
 - ✅ Breakdown per payment method
 - ✅ Estimasi float keesokan hari
 - ✅ ActivityLog untuk SHIFT_OPEN/CLOSE, SALE_RECORD/VOID/REFUND, LOW_STOCK_TRIGGER
-- ⏳ Laporan bulanan (planned)
-- ⏳ Laporan per produk (planned)
-- ⏳ Export ke Excel (planned)
+- ✅ Export laporan ke PDF dan CSV
+- ⏳ Export laporan ke Excel (.xlsx) (planned)
 
 **Technical Implementation**:
 - Aggregation queries dengan Prisma
@@ -424,8 +422,9 @@ toko-pos/
 - [x] Halaman pengaturan PPN (`/management/settings`) dengan CRUD tarif
 - [x] Halaman pergerakan stok (`/management/stock-movement`) ke API nyata
 - [x] Halaman laporan & analitik (`/management/reports`) ke API nyata
-- [ ] Laporan bulanan & tahunan
-- [ ] Export laporan ke Excel/PDF
+- [x] Laporan bulanan & tahunan dengan granularitas adaptif (hari/minggu/bulan/tahun)
+- [x] Export laporan ke PDF dan CSV
+- [ ] Export laporan ke Excel (.xlsx)
 
 ### Phase 3: Integration (📋 Planned)
 
