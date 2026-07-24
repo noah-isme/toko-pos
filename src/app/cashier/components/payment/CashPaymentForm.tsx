@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft, Banknote } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
@@ -19,11 +19,15 @@ export function CashPaymentForm({
 }: CashPaymentFormProps) {
   const [inputValue, setInputValue] = useState("");
   const [amountReceived, setAmountReceived] = useState(0);
-  const [change, setChange] = useState(0);
-  const [error, setError] = useState("");
   const [shake, setShake] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Derived state - no need for useEffect
+  const change = Math.max(0, amountReceived - totalAmount);
+  const hasError = amountReceived > 0 && amountReceived < totalAmount;
+  const error = hasError ? "Uang tidak cukup" : "";
 
   // Auto-focus on mount
   useEffect(() => {
@@ -33,24 +37,15 @@ export function CashPaymentForm({
     return () => clearTimeout(timer);
   }, []);
 
-  // Calculate change whenever amount changes
-  useEffect(() => {
-    const calculatedChange = Math.max(0, amountReceived - totalAmount);
-    setChange(calculatedChange);
-
-    if (amountReceived > 0 && amountReceived < totalAmount) {
-      setError("Uang tidak cukup");
-    } else {
-      setError("");
-    }
-  }, [amountReceived, totalAmount]);
-
   // Format input as currency
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, ""); // Remove non-digits
     setInputValue(value);
     setAmountReceived(parseInt(value) || 0);
   };
+
+  const handleFocus = () => setIsFocused(true);
+  const handleBlur = () => setIsFocused(false);
 
   // Quick amount buttons
   const handleQuickAmount = (amount: number) => {
@@ -60,25 +55,23 @@ export function CashPaymentForm({
   };
 
   // Submit payment
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
 
     if (amountReceived < totalAmount) {
-      setError("Uang tidak cukup");
       setShake(true);
       setTimeout(() => setShake(false), 400);
       return;
     }
 
     if (amountReceived === 0) {
-      setError("Masukkan jumlah uang diterima");
       setShake(true);
       setTimeout(() => setShake(false), 400);
       return;
     }
 
     onSubmit(amountReceived, change);
-  };
+  }, [amountReceived, totalAmount, change, onSubmit]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -92,7 +85,7 @@ export function CashPaymentForm({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [amountReceived, isProcessing, onBack]);
+  }, [handleSubmit, isProcessing, onBack]);
 
   // Format display value
   const displayValue = inputValue ? formatCurrency(amountReceived) : "Rp 0";
@@ -133,6 +126,8 @@ export function CashPaymentForm({
             inputMode="numeric"
             value={inputValue}
             onChange={handleInputChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
             placeholder="0"
             disabled={isProcessing}
             className={`w-full px-6 py-4 text-3xl font-bold text-center border-2 rounded-xl transition-all duration-200 focus:outline-none ${
@@ -143,7 +138,7 @@ export function CashPaymentForm({
               inputValue ? "text-transparent caret-gray-900" : "text-gray-400"
             }`}
             style={
-              !error && inputRef.current === document.activeElement
+              !error && isFocused
                 ? { boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.1)" }
                 : undefined
             }

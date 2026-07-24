@@ -32,17 +32,6 @@ import { CheckCircle } from "lucide-react";
 const DEFAULT_PAYMENT_METHOD: PaymentMethod = "CASH";
 const QRIS_PAYMENT_METHOD: PaymentMethod = "QRIS";
 
-// Map our local PaymentMethod to Prisma's PaymentMethod for API calls
-const toPrismaPaymentMethod = (method: PaymentMethod): string => {
-  const mapping: Record<PaymentMethod, string> = {
-    CASH: "CASH",
-    QRIS: "QRIS",
-    DEBIT: "DEBIT",
-    CREDIT: "CREDIT",
-    TRANSFER: "TRANSFER",
-  };
-  return mapping[method];
-};
 const DISCOUNT_LIMIT_PERCENT = Number(
   process.env.NEXT_PUBLIC_DISCOUNT_LIMIT_PERCENT ?? 50,
 );
@@ -148,7 +137,6 @@ export default function CashierPageRedesign() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
     DEFAULT_PAYMENT_METHOD,
   );
-  const [isProcessing, setIsProcessing] = useState(false);
   const [qrisCode, setQrisCode] = useState<string | null>(null);
 
   // Dialogs
@@ -159,16 +147,19 @@ export default function CashierPageRedesign() {
   const [closingCashInput, setClosingCashInput] = useState("");
   const [receiptPreview, setReceiptPreview] =
     useState<ReceiptPreviewState | null>(null);
-  const [hasPromptedShift, setHasPromptedShift] = useState(false);
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const hasPromptedShiftRef = useRef(false);
 
   // API
   const catalogQuery = api.products.list.useQuery(
     { take: 100 },
     { staleTime: 300_000 },
   );
+  const activeTaxQuery = api.settings.getActiveTaxSetting.useQuery(undefined, {
+    staleTime: 300_000,
+  });
   const recordSale = api.sales.recordSale.useMutation();
   const recentSales = api.sales.listRecent.useQuery({ limit: 1 });
   const promotionsQuery = api.promotions.list.useQuery(
@@ -214,17 +205,19 @@ export default function CashierPageRedesign() {
     void refreshShift();
   }, [activeOutletId, refreshShift]);
 
+  // Refs
+
   // Prompt shift open if needed
   useEffect(() => {
     if (isShiftLoading) return;
-    if (!activeShift && activeOutletId && !hasPromptedShift) {
+    if (!activeShift && activeOutletId && !hasPromptedShiftRef.current) {
+      hasPromptedShiftRef.current = true;
       setOpenShiftModalOpen(true);
-      setHasPromptedShift(true);
     }
-    if (activeShift && hasPromptedShift) {
-      setHasPromptedShift(false);
+    if (activeShift && hasPromptedShiftRef.current) {
+      hasPromptedShiftRef.current = false;
     }
-  }, [activeShift, activeOutletId, hasPromptedShift, isShiftLoading]);
+  }, [activeShift, activeOutletId, isShiftLoading]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -411,10 +404,17 @@ export default function CashierPageRedesign() {
       // Map PaymentMethodType to Prisma PaymentMethod enum
       const mappedMethod = method === "TUNAI" ? "CASH" : method;
 
+      const activeTax = activeTaxQuery.data;
+      const applyTax = !!activeTax;
+      const taxRate = activeTax?.rate;
+
       const result = await recordSale.mutateAsync({
         outletId: activeOutletId,
         receiptNumber: `TRX-${Date.now()}`,
         discountTotal: manualDiscount,
+        applyTax,
+        taxRate,
+        taxMode: "EXCLUSIVE",
         items: cart.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -681,6 +681,7 @@ export default function CashierPageRedesign() {
 
         {/* Payment Modal (shared with normal mode) */}
         <PaymentModal
+          key={isPaymentDialogOpen ? "open" : "closed"}
           isOpen={isPaymentDialogOpen}
           onClose={handleClosePaymentModal}
           totalAmount={totals.totalGross}
@@ -840,7 +841,6 @@ export default function CashierPageRedesign() {
               maxDiscountPercent={DISCOUNT_LIMIT_PERCENT}
               totalNet={totals.totalNet}
               paymentMethod={paymentMethod}
-              isProcessing={isProcessing}
               recentTransaction={recentTransaction}
               qrisCode={qrisCode}
               onPaymentMethodChange={setPaymentMethod}
@@ -896,6 +896,7 @@ export default function CashierPageRedesign() {
 
       {/* Payment Modal (Normal Mode) */}
       <PaymentModal
+        key={isPaymentDialogOpen ? "open" : "closed"}
         isOpen={isPaymentDialogOpen}
         onClose={handleClosePaymentModal}
         totalAmount={totals.totalGross}

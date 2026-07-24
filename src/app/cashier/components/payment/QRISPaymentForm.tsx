@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Smartphone, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
@@ -25,10 +25,55 @@ export function QRISPaymentForm({
   const [timeRemaining, setTimeRemaining] = useState(300); // 5 minutes
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Generate QR Code
+  const generateQRCode = useCallback(async () => {
+    try {
+      setStatus('generating');
+
+      // Simulate API call to generate QR code
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Generate mock transaction ID
+      const mockTransactionId = `QRIS-${Date.now()}`;
+      setTransactionId(mockTransactionId);
+
+      // Generate QR code URL using a QR code generator API
+      // In production, this would be your payment gateway's QR code
+      const qrData = `https://qris.example.com/pay?id=${mockTransactionId}&amount=${totalAmount}`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+
+      setQrCodeUrl(qrUrl);
+      setStatus('waiting');
+    } catch (error) {
+      console.error('Failed to generate QR code:', error);
+      setStatus('failed');
+      setErrorMessage('Gagal membuat QR Code. Silakan coba lagi.');
+    }
+  }, [totalAmount]);
+
+  // Check payment status (mock implementation)
+  const checkPaymentStatus = useCallback(async () => {
+    try {
+      // In production, this would call your payment gateway API
+      // For demo purposes, we'll simulate a random success after some time
+
+      // Simulate: 5% chance of success each check (simulating customer payment)
+      if (Math.random() < 0.05) {
+        setStatus('success');
+        // Wait a moment to show success state
+        setTimeout(() => {
+          onSuccess(totalAmount);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Failed to check payment status:', error);
+    }
+  }, [onSuccess, totalAmount]);
+
   // Generate QR Code on mount
   useEffect(() => {
     generateQRCode();
-  }, []);
+  }, [generateQRCode]);
 
   // Countdown timer
   useEffect(() => {
@@ -56,52 +101,7 @@ export function QRISPaymentForm({
     }, 2000); // Check every 2 seconds
 
     return () => clearInterval(pollInterval);
-  }, [status, transactionId]);
-
-  // Generate QR Code
-  const generateQRCode = async () => {
-    try {
-      setStatus('generating');
-
-      // Simulate API call to generate QR code
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Generate mock transaction ID
-      const mockTransactionId = `QRIS-${Date.now()}`;
-      setTransactionId(mockTransactionId);
-
-      // Generate QR code URL using a QR code generator API
-      // In production, this would be your payment gateway's QR code
-      const qrData = `https://qris.example.com/pay?id=${mockTransactionId}&amount=${totalAmount}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
-
-      setQrCodeUrl(qrUrl);
-      setStatus('waiting');
-    } catch (error) {
-      console.error('Failed to generate QR code:', error);
-      setStatus('failed');
-      setErrorMessage('Gagal membuat QR Code. Silakan coba lagi.');
-    }
-  };
-
-  // Check payment status (mock implementation)
-  const checkPaymentStatus = async () => {
-    try {
-      // In production, this would call your payment gateway API
-      // For demo purposes, we'll simulate a random success after some time
-
-      // Simulate: 5% chance of success each check (simulating customer payment)
-      if (Math.random() < 0.05) {
-        setStatus('success');
-        // Wait a moment to show success state
-        setTimeout(() => {
-          onSuccess(totalAmount);
-        }, 1500);
-      }
-    } catch (error) {
-      console.error('Failed to check payment status:', error);
-    }
-  };
+  }, [status, checkPaymentStatus]);
 
   const handleRetry = () => {
     setTimeRemaining(300);

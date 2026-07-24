@@ -49,15 +49,8 @@ export function PaymentModal({
 
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setStep("select-method");
-      setSelectedMethod("TUNAI");
-      setPaymentDetails(null);
-      setIsProcessing(false);
-    }
-  }, [isOpen]);
+  // Reset state when modal opens using key prop on parent instead
+  // State is initialized correctly above, no need for effect
 
   // ESC to close
   useEffect(() => {

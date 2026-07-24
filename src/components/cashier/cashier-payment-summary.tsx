@@ -35,7 +35,6 @@ interface CashierPaymentSummaryProps {
   maxDiscountPercent: number;
   totalNet: number;
   paymentMethod: PaymentMethod;
-  isProcessing: boolean;
   recentTransaction: RecentTransaction | null;
   qrisCode?: string | null;
   onPaymentMethodChange: (method: PaymentMethod) => void;
@@ -58,14 +57,13 @@ export function CashierPaymentSummary({
   maxDiscountPercent,
   totalNet,
   paymentMethod,
-  isProcessing,
   recentTransaction,
   qrisCode,
   onPaymentMethodChange,
   onManualDiscountChange,
   onCheckout,
 }: CashierPaymentSummaryProps) {
-  const canCheckout = cart.length > 0 && !isProcessing;
+  const canCheckout = cart.length > 0;
 
   return (
     <div className="sticky top-4 h-fit">
@@ -122,7 +120,7 @@ export function CashierPaymentSummary({
                     const value = Number(e.target.value) || 0;
                     onManualDiscountChange(value);
                   }}
-                  disabled={cart.length === 0 || isProcessing}
+                  disabled={cart.length === 0}
                   className="pl-10 h-9 text-sm"
                   placeholder="0"
                 />
@@ -171,7 +169,6 @@ export function CashierPaymentSummary({
               onValueChange={(value) =>
                 onPaymentMethodChange(value as PaymentMethod)
               }
-              disabled={isProcessing}
               className="space-y-2"
             >
               <div className="flex items-center space-x-3 rounded-lg border-2 border-border p-3 hover:border-primary/50 transition-colors">
@@ -235,17 +232,10 @@ export function CashierPaymentSummary({
                 canCheckout && "animate-pulse-subtle",
               )}
             >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Memproses...
-                </>
-              ) : (
-                <>
-                  <Wallet className="mr-2 h-5 w-5" />
-                  Bayar (F2)
-                </>
-              )}
+              <>
+                <Wallet className="mr-2 h-5 w-5" />
+                Bayar (F2)
+              </>
             </Button>
           </motion.div>
 
