@@ -33,6 +33,7 @@ export function PaymentSuccess({
   const methodLabel = {
     TUNAI: "Tunai",
     QRIS: "QRIS",
+    EDC: "Kartu Debit/Kredit",
     TRANSFER: "Transfer Bank",
   }[method];
 
@@ -106,6 +107,16 @@ export function PaymentSuccess({
               <div className="flex items-center gap-2 text-sm text-blue-800">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Pembayaran digital berhasil diverifikasi</span>
+              </div>
+            </div>
+          )}
+
+          {/* EDC / Card Specific Details */}
+          {method === "EDC" && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 -mx-1">
+              <div className="flex items-center gap-2 text-sm text-indigo-800">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Pembayaran kartu berhasil disetujui terminal EDC</span>
               </div>
             </div>
           )}

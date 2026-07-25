@@ -389,6 +389,7 @@ export default function CashierPageRedesign() {
     method: PaymentMethodType,
     amountPaid: number,
     change?: number,
+    gatewayReference?: string,
   ) => {
     if (!activeShift || !activeOutletId) {
       toast.error("Shift tidak aktif atau outlet tidak dipilih");
@@ -402,11 +403,18 @@ export default function CashierPageRedesign() {
 
     try {
       // Map PaymentMethodType to Prisma PaymentMethod enum
-      const mappedMethod = method === "TUNAI" ? "CASH" : method;
+      const mappedMethod =
+        method === "TUNAI" ? "CASH" : method === "EDC" ? "CARD" : method;
 
       const activeTax = activeTaxQuery.data;
       const applyTax = !!activeTax;
       const taxRate = activeTax?.rate;
+
+      const reference = gatewayReference
+        ? `Gateway: ${gatewayReference}`
+        : change !== undefined
+          ? `Cash: ${formatCurrency(amountPaid)}, Change: ${formatCurrency(change)}`
+          : undefined;
 
       const result = await recordSale.mutateAsync({
         outletId: activeOutletId,
@@ -425,10 +433,7 @@ export default function CashierPageRedesign() {
           {
             method: mappedMethod as "CASH" | "QRIS" | "CARD" | "EWALLET",
             amount: totals.totalNet,
-            reference:
-              change !== undefined
-                ? `Cash: ${formatCurrency(amountPaid)}, Change: ${formatCurrency(change)}`
-                : undefined,
+            reference,
           },
         ],
       });
@@ -687,6 +692,7 @@ export default function CashierPageRedesign() {
           totalAmount={totals.totalGross}
           discount={totals.totalDiscount}
           finalTotal={totals.totalNet}
+          outletId={activeOutletId ?? ""}
           outletName={activeOutlet?.name ?? "Outlet"}
           cashierName={activeShift?.user?.name ?? "Kasir"}
           onPaymentComplete={handlePaymentComplete}
@@ -902,6 +908,7 @@ export default function CashierPageRedesign() {
         totalAmount={totals.totalGross}
         discount={totals.totalDiscount}
         finalTotal={totals.totalNet}
+        outletId={activeOutletId ?? ""}
         outletName={activeOutlet?.name ?? "Outlet"}
         cashierName={activeShift?.user?.name ?? "Kasir"}
         onPaymentComplete={handlePaymentComplete}

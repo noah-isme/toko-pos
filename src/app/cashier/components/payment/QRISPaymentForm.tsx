@@ -1,19 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { ArrowLeft, Smartphone, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { api } from '@/trpc/client';
 
 interface QRISPaymentFormProps {
+  outletId: string;
   totalAmount: number;
-  onSuccess: (amountPaid: number) => void;
+  onSuccess: (amountPaid: number, gatewayReference?: string) => void;
   onBack: () => void;
   isProcessing: boolean;
 }
 
 type QRISStatus = 'generating' | 'waiting' | 'success' | 'failed' | 'timeout';
 
+const POLL_INTERVAL_MS = 2000;
+const EXPIRY_SECONDS = 300;
+
 export function QRISPaymentForm({
+  outletId,
   totalAmount,
   onSuccess,
   onBack,
@@ -22,57 +29,58 @@ export function QRISPaymentForm({
   const [status, setStatus] = useState<QRISStatus>('generating');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [transactionId, setTransactionId] = useState('');
-  const [timeRemaining, setTimeRemaining] = useState(300); // 5 minutes
+  const [timeRemaining, setTimeRemaining] = useState(EXPIRY_SECONDS);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Generate QR Code
+  const createQRIS = api.payments.createQRIS.useMutation();
+  const checkStatus = api.payments.checkQRIS.useQuery(
+    { transactionId },
+    {
+      enabled: Boolean(transactionId) && status === 'waiting',
+      refetchInterval: POLL_INTERVAL_MS,
+    },
+  );
+
   const generateQRCode = useCallback(async () => {
     try {
       setStatus('generating');
+      setErrorMessage('');
 
-      // Simulate API call to generate QR code
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const newReferenceId = `QRIS-${Date.now()}`;
 
-      // Generate mock transaction ID
-      const mockTransactionId = `QRIS-${Date.now()}`;
-      setTransactionId(mockTransactionId);
+      const result = await createQRIS.mutateAsync({
+        outletId,
+        amount: Math.round(totalAmount),
+        referenceId: newReferenceId,
+        description: `Pembayaran QRIS ${newReferenceId}`,
+        expiresInSeconds: EXPIRY_SECONDS,
+      });
 
-      // Generate QR code URL using a QR code generator API
-      // In production, this would be your payment gateway's QR code
-      const qrData = `https://qris.example.com/pay?id=${mockTransactionId}&amount=${totalAmount}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+      setTransactionId(result.transactionId);
+
+      const qrUrl = await QRCode.toDataURL(result.qrString, {
+        errorCorrectionLevel: 'M',
+        width: 300,
+        margin: 1,
+      });
 
       setQrCodeUrl(qrUrl);
       setStatus('waiting');
+      setTimeRemaining(EXPIRY_SECONDS);
     } catch (error) {
       console.error('Failed to generate QR code:', error);
       setStatus('failed');
-      setErrorMessage('Gagal membuat QR Code. Silakan coba lagi.');
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Gagal membuat QR Code. Silakan coba lagi.',
+      );
     }
-  }, [totalAmount]);
+  }, [outletId, totalAmount, createQRIS]);
 
-  // Check payment status (mock implementation)
-  const checkPaymentStatus = useCallback(async () => {
-    try {
-      // In production, this would call your payment gateway API
-      // For demo purposes, we'll simulate a random success after some time
-
-      // Simulate: 5% chance of success each check (simulating customer payment)
-      if (Math.random() < 0.05) {
-        setStatus('success');
-        // Wait a moment to show success state
-        setTimeout(() => {
-          onSuccess(totalAmount);
-        }, 1500);
-      }
-    } catch (error) {
-      console.error('Failed to check payment status:', error);
-    }
-  }, [onSuccess, totalAmount]);
-
-  // Generate QR Code on mount
+  // Generate QR Code on mount.
   useEffect(() => {
-    generateQRCode();
+    void generateQRCode();
   }, [generateQRCode]);
 
   // Countdown timer
@@ -92,28 +100,42 @@ export function QRISPaymentForm({
     return () => clearInterval(interval);
   }, [status]);
 
-  // Poll payment status
+  // Handle payment status changes from polling. State updates mirror the external
+  // gateway status, so they must be synchronized in an effect.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    if (status !== 'waiting') return;
+    if (status !== 'waiting' || !checkStatus.data) return;
 
-    const pollInterval = setInterval(() => {
-      checkPaymentStatus();
-    }, 2000); // Check every 2 seconds
+    const gatewayStatus = checkStatus.data.status;
 
-    return () => clearInterval(pollInterval);
-  }, [status, checkPaymentStatus]);
+    if (gatewayStatus === 'PAID') {
+      setStatus('success');
+      const timer = setTimeout(() => {
+        onSuccess(totalAmount, transactionId);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+
+    if (gatewayStatus === 'FAILED' || gatewayStatus === 'EXPIRED' || gatewayStatus === 'CANCELLED') {
+      setStatus('failed');
+      setErrorMessage(
+        gatewayStatus === 'EXPIRED'
+          ? 'QRIS sudah kedaluwarsa. Silakan coba lagi.'
+          : 'Pembayaran gagal. Silakan coba lagi.',
+      );
+    }
+  }, [checkStatus.data, status, totalAmount, onSuccess, transactionId]);
 
   const handleRetry = () => {
-    setTimeRemaining(300);
-    setErrorMessage('');
-    generateQRCode();
+    setTransactionId('');
+    setQrCodeUrl('');
+    void generateQRCode();
   };
 
   const handleCancel = () => {
     onBack();
   };
 
-  // Format time remaining
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -136,7 +158,6 @@ export function QRISPaymentForm({
       {/* QR Code Display */}
       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8">
         <div className="flex flex-col items-center">
-          {/* QR Code Container */}
           <div className="relative bg-white p-6 rounded-2xl shadow-xl">
             {status === 'generating' && (
               <div className="w-[300px] h-[300px] flex items-center justify-center">
@@ -149,12 +170,13 @@ export function QRISPaymentForm({
 
             {status === 'waiting' && qrCodeUrl && (
               <div className="animate-fade-in">
+                {/* Data URL generated client-side; next/image is not beneficial here. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={qrCodeUrl}
                   alt="QRIS QR Code"
                   className="w-[300px] h-[300px] rounded-lg"
                 />
-                {/* Scanning animation overlay */}
                 <div className="absolute inset-0 pointer-events-none">
                   <div className="absolute top-1/2 left-6 right-6 h-0.5 bg-blue-500/50 animate-scan"></div>
                 </div>
@@ -186,18 +208,16 @@ export function QRISPaymentForm({
             )}
           </div>
 
-          {/* Status Info */}
           <div className="mt-6 text-center space-y-2">
             {status === 'waiting' && (
               <>
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                  <p className="text-sm font-medium text-gray-700">
-                    Menunggu pembayaran...
-                  </p>
+                  <p className="text-sm font-medium text-gray-700">Menunggu pembayaran...</p>
                 </div>
                 <p className="text-xs text-gray-600">
-                  Waktu tersisa: <span className="font-mono font-bold text-blue-600">{formatTime(timeRemaining)}</span>
+                  Waktu tersisa:{' '}
+                  <span className="font-mono font-bold text-blue-600">{formatTime(timeRemaining)}</span>
                 </p>
               </>
             )}
@@ -245,17 +265,15 @@ export function QRISPaymentForm({
       {/* Action Buttons */}
       <div className="flex gap-3 pt-4">
         {status === 'waiting' && (
-          <>
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={isProcessing}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-4 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors focus:outline-none focus:ring-4 focus:ring-gray-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              Kembali
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={isProcessing}
+            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors focus:outline-none focus:ring-4 focus:ring-gray-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Kembali
+          </button>
         )}
 
         {(status === 'failed' || status === 'timeout') && (
@@ -278,7 +296,6 @@ export function QRISPaymentForm({
         )}
       </div>
 
-      {/* Helper text */}
       {status === 'waiting' && (
         <div className="text-center text-xs text-gray-500">
           <p>Status pembayaran akan otomatis diperbarui</p>

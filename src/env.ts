@@ -34,6 +34,30 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string().optional(),
   STORE_NPWP: z.string().optional(),
   DISCOUNT_LIMIT_PERCENT: z.coerce.number().min(0).max(100).default(50),
+  // Payment gateway configuration (all server-side)
+  PAYMENT_GATEWAY_PROVIDER: z
+    .enum(["xendit", "midtrans", "mock"])
+    .default("mock"),
+  PAYMENT_GATEWAY_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
+  XENDIT_SECRET_KEY: z.string().optional(),
+  XENDIT_PUBLIC_KEY: z.string().optional(),
+  XENDIT_API_URL: z.string().url().optional(),
+  MIDTRANS_SERVER_KEY: z.string().optional(),
+  MIDTRANS_CLIENT_KEY: z.string().optional(),
+  MIDTRANS_API_URL: z.string().url().optional(),
+  EDC_PROVIDER: z.enum(["mock", "verifone", "ingenico"]).default("mock"),
+  EDC_API_URL: z.string().url().optional(),
+  EDC_TERMINAL_ID: z.string().optional(),
+  EDC_MERCHANT_ID: z.string().optional(),
+  PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  // WhatsApp notifications (optional)
+  WHATSAPP_PROVIDER: z
+    .enum(["wablas", "fonnte", "custom", "mock"])
+    .default("mock"),
+  WHATSAPP_API_URL: z.string().url().optional(),
+  WHATSAPP_API_KEY: z.string().optional(),
+  WHATSAPP_DEVICE_ID: z.string().optional(),
+  WHATSAPP_SENDER_ID: z.string().optional(),
 });
 
 // Helper: treat empty strings as undefined (helps when env var exists but is empty)
@@ -58,6 +82,24 @@ const parsed = envSchema.safeParse({
   SUPABASE_ANON_KEY: maybe(process.env.SUPABASE_ANON_KEY),
   STORE_NPWP: maybe(process.env.STORE_NPWP),
   DISCOUNT_LIMIT_PERCENT: maybe(process.env.DISCOUNT_LIMIT_PERCENT),
+  PAYMENT_GATEWAY_PROVIDER: maybe(process.env.PAYMENT_GATEWAY_PROVIDER),
+  PAYMENT_GATEWAY_MODE: maybe(process.env.PAYMENT_GATEWAY_MODE),
+  XENDIT_SECRET_KEY: maybe(process.env.XENDIT_SECRET_KEY),
+  XENDIT_PUBLIC_KEY: maybe(process.env.XENDIT_PUBLIC_KEY),
+  XENDIT_API_URL: maybe(process.env.XENDIT_API_URL),
+  MIDTRANS_SERVER_KEY: maybe(process.env.MIDTRANS_SERVER_KEY),
+  MIDTRANS_CLIENT_KEY: maybe(process.env.MIDTRANS_CLIENT_KEY),
+  MIDTRANS_API_URL: maybe(process.env.MIDTRANS_API_URL),
+  EDC_PROVIDER: maybe(process.env.EDC_PROVIDER),
+  EDC_API_URL: maybe(process.env.EDC_API_URL),
+  EDC_TERMINAL_ID: maybe(process.env.EDC_TERMINAL_ID),
+  EDC_MERCHANT_ID: maybe(process.env.EDC_MERCHANT_ID),
+  PAYMENT_WEBHOOK_SECRET: maybe(process.env.PAYMENT_WEBHOOK_SECRET),
+  WHATSAPP_PROVIDER: maybe(process.env.WHATSAPP_PROVIDER),
+  WHATSAPP_API_URL: maybe(process.env.WHATSAPP_API_URL),
+  WHATSAPP_API_KEY: maybe(process.env.WHATSAPP_API_KEY),
+  WHATSAPP_DEVICE_ID: maybe(process.env.WHATSAPP_DEVICE_ID),
+  WHATSAPP_SENDER_ID: maybe(process.env.WHATSAPP_SENDER_ID),
 });
 
 if (!parsed.success) {

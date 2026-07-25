@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, CreditCard, Smartphone, Banknote } from "lucide-react";
+import { X, CreditCard, Smartphone, Banknote, ScanLine } from "lucide-react";
 import { CashPaymentForm } from "@/app/cashier/components/payment/CashPaymentForm";
 import { QRISPaymentForm } from "@/app/cashier/components/payment/QRISPaymentForm";
+import { EDCPaymentForm } from "@/app/cashier/components/payment/EDCPaymentForm";
 import { PaymentSuccess } from "@/app/cashier/components/payment/PaymentSuccess";
 import { formatCurrency } from "@/lib/utils";
 
-export type PaymentMethodType = "TUNAI" | "QRIS" | "TRANSFER";
+export type PaymentMethodType = "TUNAI" | "QRIS" | "EDC" | "TRANSFER";
 
 export interface PaymentModalProps {
   isOpen: boolean;
@@ -15,12 +16,14 @@ export interface PaymentModalProps {
   totalAmount: number;
   discount: number;
   finalTotal: number;
+  outletId?: string;
   outletName?: string;
   cashierName?: string;
   onPaymentComplete: (
     method: PaymentMethodType,
     amountPaid: number,
     change?: number,
+    gatewayReference?: string,
   ) => Promise<void>;
 }
 
@@ -32,6 +35,7 @@ export function PaymentModal({
   totalAmount,
   discount,
   finalTotal,
+  outletId,
   outletName = "Outlet Utama",
   cashierName = "Kasir",
   onPaymentComplete,
@@ -44,6 +48,7 @@ export function PaymentModal({
     method: PaymentMethodType;
     amountPaid: number;
     change?: number;
+    gatewayReference?: string;
     totalAmount: number;
   } | null>(null);
 
@@ -81,16 +86,21 @@ export function PaymentModal({
     setStep("payment");
   };
 
-  const handlePaymentSubmit = async (amountPaid: number, change?: number) => {
+  const handlePaymentSubmit = async (
+    amountPaid: number,
+    change?: number,
+    gatewayReference?: string,
+  ) => {
     setIsProcessing(true);
     // Store the total amount BEFORE the payment completes (and cart gets cleared)
     const currentTotal = finalTotal;
     try {
-      await onPaymentComplete(selectedMethod, amountPaid, change);
+      await onPaymentComplete(selectedMethod, amountPaid, change, gatewayReference);
       setPaymentDetails({
         method: selectedMethod,
         amountPaid,
         change,
+        gatewayReference,
         totalAmount: currentTotal, // Use the stored total
       });
       setStep("success");
@@ -100,6 +110,13 @@ export function PaymentModal({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleGatewayPaymentSubmit = async (
+    amountPaid: number,
+    gatewayReference?: string,
+  ) => {
+    await handlePaymentSubmit(amountPaid, undefined, gatewayReference);
   };
 
   const handleBackToMethod = () => {
@@ -219,6 +236,27 @@ export function PaymentModal({
                   </div>
                   <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-blue-500/0 group-hover:from-blue-500/5 group-hover:to-blue-500/10 rounded-xl transition-all"></div>
                 </button>
+
+                {/* EDC / Kartu */}
+                <button
+                  onClick={() => handleMethodSelect("EDC")}
+                  className="group relative p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-indigo-500 hover:shadow-lg transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-indigo-500/20"
+                >
+                  <div className="flex flex-col items-center text-center gap-3">
+                    <div className="p-4 bg-indigo-50 group-hover:bg-indigo-100 rounded-full transition-colors">
+                      <ScanLine className="w-8 h-8 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-lg">
+                        Kartu
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Debit / Kredit via EDC
+                      </p>
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 to-indigo-500/0 group-hover:from-indigo-500/5 group-hover:to-indigo-500/10 rounded-xl transition-all"></div>
+                </button>
               </div>
 
               <div className="mt-6 text-center">
@@ -246,8 +284,18 @@ export function PaymentModal({
               )}
               {selectedMethod === "QRIS" && (
                 <QRISPaymentForm
+                  outletId={outletId ?? ""}
                   totalAmount={finalTotal}
-                  onSuccess={handlePaymentSubmit}
+                  onSuccess={handleGatewayPaymentSubmit}
+                  onBack={handleBackToMethod}
+                  isProcessing={isProcessing}
+                />
+              )}
+              {selectedMethod === "EDC" && (
+                <EDCPaymentForm
+                  outletId={outletId ?? ""}
+                  totalAmount={finalTotal}
+                  onSuccess={handleGatewayPaymentSubmit}
                   onBack={handleBackToMethod}
                   isProcessing={isProcessing}
                 />
