@@ -86,14 +86,22 @@ jobs:
         run: pnpm run db:push
 
       - name: Seed database
-        # The E2E login specs (auth-credentials, ui/login) drive real credential
-        # sign-in against the DB, so the seed users must exist. db:push only
-        # creates the schema; without this step owner@example.com is absent and
-        # those two specs fail (the rest pass via the NEXT_PUBLIC_E2E bypass).
+        # seed:full rather than seed-initial.mjs. The login specs
+        # (auth-credentials, ui/login) need owner@example.com with the password
+        # "password", which both scripts provide, but the rest of the suite also
+        # needs catalogue and transaction data: seed-initial.mjs creates only
+        # users, outlets and daily summaries, so the products, audit-log and
+        # owner-dashboard specs failed on missing categories, activity logs and
+        # sales.
+        #
+        # seed-full.mjs truncates every table before rebuilding (clearAllTables).
+        # That is safe here because the Postgres service container is created
+        # fresh for each run, but it is why this must never be pointed at a
+        # database that holds anything worth keeping.
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
           DIRECT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
-        run: node ./scripts/seed-initial.mjs
+        run: pnpm run seed:full
 
       - name: Run lint
         run: pnpm run lint
