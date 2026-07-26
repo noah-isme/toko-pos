@@ -16,6 +16,7 @@ import {
 import { motion } from "framer-motion";
 import { TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 interface SalesChartProps {
   data: Array<{
@@ -38,6 +39,7 @@ export function SalesChart({
   showLegend = false,
   className,
 }: SalesChartProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   // Format currency for tooltips
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -175,6 +177,7 @@ export function SalesChart({
             <Tooltip content={<CustomTooltip />} />
             {showLegend && <Legend />}
             <Line
+              isAnimationActive={!prefersReducedMotion}
               type="monotone"
               dataKey="value"
               stroke="hsl(var(--primary))"
@@ -193,6 +196,7 @@ export function SalesChart({
             />
             {data.some((d) => d.target) && (
               <Line
+                isAnimationActive={!prefersReducedMotion}
                 type="monotone"
                 dataKey="target"
                 stroke="hsl(var(--muted-foreground))"
@@ -230,6 +234,7 @@ export function SalesChart({
             <Tooltip content={<CustomTooltip />} />
             {showLegend && <Legend />}
             <Bar
+              isAnimationActive={!prefersReducedMotion}
               dataKey="value"
               fill="hsl(var(--primary))"
               radius={[4, 4, 0, 0]}

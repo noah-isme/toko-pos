@@ -82,25 +82,20 @@ export function OutletSelector({
     );
   }
 
+  const currentRole =
+    userOutlets.find((uo) => uo.outletId === currentOutlet.id)?.role ??
+    "CASHIER";
+
+  // One control, not two. This previously rendered the outlet name as static
+  // text *and* again inside the select beside it, which was the single widest
+  // block in the header and a large part of why the bar overflowed.
   return (
-    <label className="flex items-center gap-3 rounded-md border bg-white/70 px-3 py-2 shadow-sm backdrop-blur">
-      <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden />
-      <div className="flex flex-col">
-        <span className="text-sm font-medium text-foreground">
-          {currentOutlet.name}
-        </span>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{currentOutlet.code}</span>
-          <Badge
-            variant="secondary"
-            className="text-[10px] uppercase tracking-wide"
-          >
-            {userOutlets.find((uo) => uo.outletId === currentOutlet.id)?.role ||
-              "CASHIER"}
-          </Badge>
-        </div>
-      </div>
-      <div className="relative ml-2 flex items-center">
+    <label className="flex min-w-0 items-center gap-2 rounded-md border bg-white/70 px-2.5 py-1.5 shadow-sm backdrop-blur">
+      <Building2
+        className="h-4 w-4 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+      <div className="relative flex min-w-0 items-center">
         <select
           aria-label="Pilih outlet aktif"
           value={currentOutlet.id}
@@ -112,7 +107,7 @@ export function OutletSelector({
               setCurrentOutlet(selectedOutlet);
             }
           }}
-          className="appearance-none rounded-md border border-transparent bg-transparent px-3 py-2 pr-8 text-sm font-medium text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+          className="max-w-[10rem] appearance-none truncate rounded-md border border-transparent bg-transparent pr-6 text-sm font-medium text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
         >
           {outlets.map((outlet) => (
             <option key={outlet.id} value={outlet.id}>
@@ -121,10 +116,16 @@ export function OutletSelector({
           ))}
         </select>
         <ChevronDown
-          className="pointer-events-none absolute right-2 h-4 w-4 text-muted-foreground"
+          className="pointer-events-none absolute right-0 h-4 w-4 text-muted-foreground"
           aria-hidden
         />
       </div>
+      <Badge
+        variant="secondary"
+        className="hidden shrink-0 text-[10px] uppercase tracking-wide 2xl:inline-flex"
+      >
+        {currentRole}
+      </Badge>
     </label>
   );
 }

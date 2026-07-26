@@ -33,6 +33,7 @@ import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components
 import { MotionTableBody, MotionTableRow } from "@/components/ui/motion-table";
 import { api } from "@/trpc/client";
 import { downloadCSV } from "@/lib/export";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -42,6 +43,7 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 export default function DailyReportPage() {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"daily" | "weekly">("daily");
@@ -244,7 +246,9 @@ export default function DailyReportPage() {
         <Card className="card-focusable">
           <CardHeader>
             <CardTitle>Total Transaksi</CardTitle>
-            <CardDescription>{format(new Date(selectedDate), "PPP", { locale: localeId })}</CardDescription>
+            <CardDescription data-testid="report-date-label">
+              {format(new Date(selectedDate), "PPP", { locale: localeId })}
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
             {summaryQuery.isLoading ? "…" : summaryQuery.data?.sales.length ?? 0}
@@ -536,8 +540,9 @@ export default function DailyReportPage() {
                       labelFormatter={(label) => label}
                     />
                     <Legend wrapperStyle={{ fontSize: "12px" }} />
-                    <Bar yAxisId="left" dataKey="omzet" name="Omzet" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="omzet" name="Omzet" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} isAnimationActive={!prefersReducedMotion} />
                     <Line
+                      isAnimationActive={!prefersReducedMotion}
                       yAxisId="right"
                       type="monotone"
                       dataKey="transaksi"

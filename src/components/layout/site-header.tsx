@@ -17,10 +17,6 @@ import {
   Users,
   ScrollText,
   Building2,
-  LayoutDashboard,
-  Receipt,
-  Package,
-  BarChart3,
   ClipboardCheck,
   Truck,
   Command
@@ -54,15 +50,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Brand } from "@/components/ui/brand";
+import { isNavItemActive, visibleGroups } from "@/components/layout/nav-items";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/cashier", label: "Kasir", icon: Receipt },
-  { href: "/management/products", label: "Produk", icon: Package },
-  { href: "/reports/daily", label: "Laporan", icon: BarChart3 },
-];
-
-export function SiteHeader({ className }: { className?: string }) {
+export function SiteHeader({
+  className,
+  hideBrand = false,
+}: {
+  className?: string;
+  /** The sidebar already shows the brand on desktop; avoid rendering it twice. */
+  hideBrand?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, status } = useSession();
@@ -104,6 +101,10 @@ export function SiteHeader({ className }: { className?: string }) {
   }, [router]);
 
   const isAuthenticated = status === "authenticated";
+  const mobileGroups = React.useMemo(
+    () => visibleGroups(session?.user?.role),
+    [session?.user?.role],
+  );
   const initials = React.useMemo(() => {
     const name = session?.user?.name;
     if (name) {
@@ -164,57 +165,38 @@ export function SiteHeader({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-screen-2xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        {/* Left Section: Logo + Navigation */}
-        <div className="flex flex-1 items-center gap-6">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-80">
+      <div className="mx-auto flex h-16 w-full max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        {/* Left Section: Logo. `shrink-0`, not `flex-1` — with the nav moved to
+            the sidebar this is empty on desktop, and a third of the bar was
+            being reserved for nothing while the right side got squeezed. */}
+        <div className="flex shrink-0 items-center gap-6">
+          {/* Logo — hidden on desktop when the sidebar already shows the brand */}
+          <Link
+            href="/"
+            className={cn(
+              "flex shrink-0 items-center gap-2 transition-opacity hover:opacity-80",
+              hideBrand && "lg:hidden",
+            )}
+          >
             <Brand variant="logo" size="sm" />
           </Link>
 
-          {/* Desktop Navigation */}
-          {isAuthenticated && (
-            <nav className="hidden items-center gap-1 lg:flex" aria-label="Navigasi utama">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                      "hover:bg-accent hover:text-accent-foreground",
-                      isActive
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                    {isActive && (
-                      <div className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-primary" />
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-          )}
+          {/* Primary navigation now lives in AppSidebar; see nav-items.ts. */}
         </div>
 
         {/* Center Section: Search (Desktop Only) */}
         {isAuthenticated && (
-          <div className="hidden flex-1 justify-center lg:flex">
+          <div className="hidden min-w-0 flex-1 justify-center lg:flex">
             <button
               className={cn(
-                "flex w-full max-w-md items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground transition-colors",
+                "flex w-full min-w-0 max-w-md items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground transition-colors",
                 "hover:bg-muted hover:text-foreground"
               )}
               onClick={() => toast.info("Quick search coming soon!")}
             >
-              <Search className="h-4 w-4" />
-              <span>Quick search...</span>
-              <kbd className="ml-auto hidden rounded bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm sm:inline-block">
+              <Search className="h-4 w-4 shrink-0" />
+              <span className="truncate">Quick search...</span>
+              <kbd className="ml-auto hidden shrink-0 rounded bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm 2xl:inline-block">
                 <Command className="mr-1 inline h-3 w-3" />K
               </kbd>
             </button>
@@ -223,7 +205,7 @@ export function SiteHeader({ className }: { className?: string }) {
 
         {/* Right Section: Actions + User */}
         {isAuthenticated ? (
-          <div className="flex flex-1 items-center justify-end gap-2">
+          <div className="flex shrink-0 items-center justify-end gap-2">
             {/* Outlet Selector */}
             <OutletSelector />
 
@@ -257,19 +239,6 @@ export function SiteHeader({ className }: { className?: string }) {
               </div>
             </div>
 
-            {/* Clock */}
-            <div className="hidden items-center gap-2 rounded-lg border bg-card px-3 py-2 lg:flex">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium tabular-nums">
-                {mounted
-                  ? time.toLocaleTimeString("id-ID", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "--:--"}
-              </span>
-            </div>
-
             {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -290,27 +259,22 @@ export function SiteHeader({ className }: { className?: string }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Help */}
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/docs">
-                <HelpCircle className="h-4 w-4" />
-              </Link>
-            </Button>
-
             {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="gap-2 px-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xs font-semibold text-white shadow-sm">
+                <Button variant="ghost" className="min-w-0 gap-2 px-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xs font-semibold text-white shadow-sm">
                     {initials}
                   </div>
-                  <div className="hidden flex-col items-start lg:flex">
-                    <span className="text-sm font-medium">{session?.user?.name}</span>
+                  <div className="hidden min-w-0 flex-col items-start 2xl:flex">
+                    <span className="max-w-[9rem] truncate text-sm font-medium">
+                      {session?.user?.name}
+                    </span>
                     <Badge variant="secondary" className="h-4 text-[10px] font-medium">
                       {session?.user?.role}
                     </Badge>
                   </div>
-                  <ChevronDown className="hidden h-4 w-4 text-muted-foreground lg:block" />
+                  <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted-foreground 2xl:block" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -318,6 +282,17 @@ export function SiteHeader({ className }: { className?: string }) {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium">{session?.user?.name}</p>
                     <p className="text-xs text-muted-foreground">{session?.user?.email}</p>
+                    <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" aria-hidden />
+                      <span className="tabular-nums" data-testid="header-clock">
+                        {mounted
+                          ? time.toLocaleTimeString("id-ID", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "--:--"}
+                      </span>
+                    </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -381,6 +356,12 @@ export function SiteHeader({ className }: { className?: string }) {
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/docs">
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    Bantuan
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     void signOut({ callbackUrl: "/auth/login" });
@@ -401,27 +382,43 @@ export function SiteHeader({ className }: { className?: string }) {
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-full max-w-sm p-0">
-                <nav className="flex flex-col gap-1 p-4" aria-label="Navigasi utama">
-                  {navItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setMobileNavOpen(false)}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-accent hover:text-accent-foreground"
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
+                <DialogHeader className="px-4 pt-4">
+                  <DialogTitle>Navigasi</DialogTitle>
+                </DialogHeader>
+                <nav
+                  className="max-h-[70vh] overflow-y-auto p-4 pt-2"
+                  aria-label="Navigasi utama"
+                >
+                  {mobileGroups.map((group) => (
+                    <div key={group.label} className="mb-4 last:mb-0">
+                      <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {group.label}
+                      </p>
+                      <div className="flex flex-col gap-1">
+                        {group.items.map((item) => {
+                          const isActive = isNavItemActive(pathname, item.href);
+                          const Icon = item.icon;
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setMobileNavOpen(false)}
+                              aria-current={isActive ? "page" : undefined}
+                              className={cn(
+                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                isActive
+                                  ? "bg-primary text-primary-foreground"
+                                  : "hover:bg-accent hover:text-accent-foreground"
+                              )}
+                            >
+                              <Icon className="h-4 w-4 shrink-0" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </nav>
               </DialogContent>
             </Dialog>

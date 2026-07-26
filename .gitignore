@@ -57,3 +57,6 @@ next-env.d.ts
 .omo/
 .qwen/
 barcode
+
+# pnpm content-addressable store (created by containerized runs)
+.pnpm-store/

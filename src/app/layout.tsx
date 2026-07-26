@@ -1,10 +1,8 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import { Providers } from "@/app/providers";
-import { SiteHeader } from "@/components/layout/site-header";
+import { AppShell } from "@/components/layout/app-shell";
 import { getServerAuthSession } from "@/server/auth";
-import PageTransition from "@/components/ui/page-transition";
-import PageProgress from "@/components/ui/page-progress";
 
 import "./globals.css";
 
@@ -32,18 +30,7 @@ export default async function RootLayout({
             >
               Lewati ke konten utama
             </a>
-            <SiteHeader />
-            <main
-              id="main-content"
-              className="mx-auto w-full max-w-screen-2xl px-4 pb-10 pt-20 sm:px-6 lg:px-8"
-            >
-              <PageProgress />
-              <PageTransition
-                keyProp={typeof children === "object" ? undefined : undefined}
-              >
-                {children}
-              </PageTransition>
-            </main>
+            <AppShell>{children}</AppShell>
           </div>
         </Providers>
       </body>

@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 type RevenueTrendChartProps = {
   data: Array<{
@@ -20,6 +21,7 @@ type RevenueTrendChartProps = {
 };
 
 export function RevenueTrendChart({ data, className }: RevenueTrendChartProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const chartData = useMemo(() => {
     return data.map((item) => ({
       date: new Date(item.date).toLocaleDateString("id-ID", {
@@ -72,6 +74,7 @@ export function RevenueTrendChart({ data, className }: RevenueTrendChartProps) {
             }}
           />
           <Area
+            isAnimationActive={!prefersReducedMotion}
             type="monotone"
             dataKey="revenue"
             stroke="#10b981"

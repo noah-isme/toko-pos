@@ -113,6 +113,25 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: pnpm exec playwright test --project=chromium --reporter=list
 
+      - name: Run visual regression tests (Playwright)
+        # Separate from the E2E step because visual specs need the session
+        # bypass OFF (NEXT_PUBLIC_E2E=false) so pages render as the admin the
+        # specs authenticate as; playwright.config.ts excludes them from the
+        # default suite for the same reason. Before this step the visual suite
+        # never executed in CI at all — the module-level test.skip guards saw no
+        # PLAYWRIGHT_VISUAL_AUTH and skipped all 20 authenticated tests.
+        #
+        # Non-blocking for now: the committed baselines were recorded on a
+        # developer machine whose font stack differs from ubuntu-latest, so
+        # text-heavy pages will diff on antialiasing alone. Diffs upload as
+        # artifacts below. Make this blocking once baselines are regenerated in
+        # this environment (see README / DOCS_INDEX for the procedure).
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/testdb
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+        run: pnpm run test:e2e:visual
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4

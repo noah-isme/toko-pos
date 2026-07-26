@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 interface CategoryChartProps {
   data: Array<{
@@ -38,6 +39,7 @@ export function CategoryChart({
   height = 300,
   className,
 }: CategoryChartProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   // Calculate percentages and assign colors
   const chartData = useMemo(() => {
     const total = data.reduce((sum, item) => sum + item.value, 0);
@@ -116,6 +118,7 @@ export function CategoryChart({
           <ResponsiveContainer width={height} height={height}>
             <PieChart>
               <Pie
+                isAnimationActive={!prefersReducedMotion}
                 data={chartData}
                 cx="50%"
                 cy="50%"

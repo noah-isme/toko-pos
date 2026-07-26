@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { motion } from "framer-motion";
 import { Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 interface PaymentMethodChartProps {
   data: Array<{
@@ -40,6 +41,7 @@ export function PaymentMethodChart({
   height = 300,
   className,
 }: PaymentMethodChartProps) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const chartData = useMemo(() => {
     return data.map((item, index) => ({
       ...item,
@@ -120,6 +122,7 @@ export function PaymentMethodChart({
             <ResponsiveContainer width={height} height={height}>
               <PieChart>
                 <Pie
+                  isAnimationActive={!prefersReducedMotion}
                   data={chartData}
                   cx="50%"
                   cy="50%"

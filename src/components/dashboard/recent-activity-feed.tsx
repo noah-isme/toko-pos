@@ -89,7 +89,7 @@ export function RecentActivityFeed({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1" data-testid="relative-time">
                     {formatDistanceToNow(activity.timestamp, {
                       addSuffix: true,
                       locale: id,

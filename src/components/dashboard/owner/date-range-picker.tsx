@@ -107,7 +107,10 @@ export function DateRangePicker({
       <div className="hidden items-center gap-2 lg:flex">
         <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">
+          <span
+            className="text-sm font-medium text-foreground"
+            data-testid="date-range-label"
+          >
             {formatDateRange(value)}
           </span>
         </div>

@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { api } from "@/trpc/client";
 import { downloadCSV } from "@/lib/export";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -146,6 +147,7 @@ function TrendIndicator({
 }
 
 export default function ReportsPage() {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [selectedOutlet, setSelectedOutlet] = useState<string>("all");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("week");
 
@@ -577,7 +579,7 @@ export default function ReportsPage() {
                         fontSize: "14px",
                       }}
                     />
-                    <Bar dataKey="sales" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="sales" fill="#3b82f6" radius={[8, 8, 0, 0]} isAnimationActive={!prefersReducedMotion} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -617,6 +619,7 @@ export default function ReportsPage() {
                       }}
                     />
                     <Line
+                      isAnimationActive={!prefersReducedMotion}
                       type="monotone"
                       dataKey="transactions"
                       stroke="#10b981"
