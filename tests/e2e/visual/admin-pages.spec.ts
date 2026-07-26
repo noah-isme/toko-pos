@@ -1,9 +1,11 @@
-import { expect, test, type Page } from "@playwright/test";
-import { encode } from "next-auth/jwt";
+import { expect, test } from "@playwright/test";
 
-import { setupTrpcMock } from "../mocks";
-
-const ADMIN_EMAIL = "admin@example.com";
+import {
+  authenticateAsAdmin,
+  mockStableData,
+  settle,
+  screenshotOptions,
+} from "./helpers";
 
 test.skip(
   process.env.PLAYWRIGHT_VISUAL_AUTH !== "true",
@@ -11,112 +13,162 @@ test.skip(
 );
 test.setTimeout(120_000);
 
-const screenshotOptions = {
-  fullPage: false,
-  animations: "allow" as const,
-  maxDiffPixelRatio: 0.01,
-};
-
-async function settle(page: Page) {
-  await page.waitForTimeout(500);
-  await page.addStyleTag({
-    content: `*, *::before, *::after { caret-color: transparent !important; }
-    html { scrollbar-width: none !important; }
-    ::-webkit-scrollbar { display: none !important; width: 0 !important; }
-    nextjs-portal { display: none !important; }`,
-  });
-}
-
-async function authenticateAsAdmin(page: Page) {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const token = await encode({
-    secret: process.env.NEXTAUTH_SECRET ?? "test-secret",
-    token: {
-      sub: "visual-admin",
-      name: "Admin Visual",
-      email: ADMIN_EMAIL,
-      role: "ADMIN",
-    },
-  });
-
-  await page.context().addCookies([
-    {
-      name: "next-auth.session-token",
-      value: token,
-      domain: "127.0.0.1",
-      path: "/",
-      httpOnly: true,
-      sameSite: "Lax",
-      expires: Math.floor(Date.now() / 1_000) + 60 * 60,
-    },
-  ]);
-
-  const sessionResponse = await page.request.get("/api/auth/session");
-  expect(sessionResponse.ok()).toBeTruthy();
-  const session = (await sessionResponse.json()) as {
-    user?: { email?: string; role?: string };
-  };
-  expect(session.user).toMatchObject({ email: ADMIN_EMAIL, role: "ADMIN" });
-}
-
-async function mockStableAdminData(page: Page) {
-  const outlet = {
-    id: "visual-outlet-main",
-    name: "Outlet Utama",
-    code: "MAIN",
-    address: "Jl. Merdeka No. 123, Jakarta Pusat",
-  };
-
-  await setupTrpcMock(page, {
-    "outlets.getUserOutlets": () => [
-      {
-        id: "visual-admin-outlet",
-        outletId: outlet.id,
-        role: "MANAGER",
-        outlet,
-      },
-    ],
-    "cashSessions.getActive": () => null,
-    "sales.getDailySummary": () => ({
-      date: "2026-07-15T00:00:00.000Z",
-      totals: {
-        totalGross: 0,
-        totalDiscount: 0,
-        totalNet: 0,
-        totalItems: 0,
-        totalCash: 0,
-        totalTax: 0,
-      },
-      sales: [],
-    }),
-    "inventory.listLowStock": () => [
-      {
-        id: "visual-low-stock",
-        productId: "visual-product",
-        outletId: outlet.id,
-        productName: "Kopi Arabica Aceh Gayo 250g",
-        productSku: "SKU-COFFEE-ARABICA-250",
-        outletName: outlet.name,
-        quantity: 2,
-        minStock: 5,
-        triggeredAt: "2026-07-15T01:00:00.000Z",
-        clearedAt: null,
-        note: null,
-      },
-    ],
-  });
-}
-
 test.beforeEach(async ({ page }) => {
-  await mockStableAdminData(page);
+  await mockStableData(page);
   await authenticateAsAdmin(page);
 });
 
-test("dashboard admin", async ({ page }) => {
-  await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByText("Admin Visual", { exact: false })).toBeVisible();
-  await expect(page.getByText("Outlet Utama", { exact: true }).first()).toBeVisible();
-  await settle(page);
-  await expect(page).toHaveScreenshot("admin-dashboard.png", screenshotOptions);
+test.describe("Dashboard pages", () => {
+  test("dashboard admin", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-dashboard.png", screenshotOptions);
+  });
+
+  test("dashboard owner", async ({ page }) => {
+    await page.goto("/dashboard/owner", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Dashboard Owner" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-dashboard-owner.png", screenshotOptions);
+  });
+});
+
+test.describe("Management pages", () => {
+  test("products list", async ({ page }) => {
+    await page.goto("/management/products", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Manajemen Produk" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-products.png", screenshotOptions);
+  });
+
+  test("products add form", async ({ page }) => {
+    await page.goto("/management/products/add", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Tambah Produk" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-products-add.png", screenshotOptions);
+  });
+
+  test("promotions", async ({ page }) => {
+    await page.goto("/management/promotions", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Dynamic Promotion Engine" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-promotions.png", screenshotOptions);
+  });
+
+  test("receiving", async ({ page }) => {
+    await page.goto("/management/receiving", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Penerimaan Barang" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-receiving.png", screenshotOptions);
+  });
+
+  test("reports analytics", async ({ page }) => {
+    await page.goto("/management/reports", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Laporan & Analitik" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-reports.png", screenshotOptions);
+  });
+
+  test("settings", async ({ page }) => {
+    await page.goto("/management/settings", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Pengaturan", exact: true })).toBeVisible({ timeout: 60000 });
+    // Wait for tax settings to load - check for active tax summary
+    await expect(page.getByText("PPN Aktif Saat Ini")).toBeVisible({ timeout: 60000 });
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-settings.png", screenshotOptions);
+  });
+
+  test("stock management", async ({ page }) => {
+    await page.goto("/management/stock", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Manajemen Stok" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-stock.png", screenshotOptions);
+  });
+
+  test("stock movement", async ({ page }) => {
+    await page.goto("/management/stock-movement", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("heading", { name: "Pergerakan Stok" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot(
+      "admin-stock-movement.png",
+      screenshotOptions,
+    );
+  });
+
+  test("stock opname", async ({ page }) => {
+    await page.goto("/management/stock-opname", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Stock Opname" })).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-stock-opname.png", screenshotOptions);
+  });
+
+  test("stock transfer", async ({ page }) => {
+    await page.goto("/management/stock-transfer", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("heading", { name: "Stok Antar Outlet" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot(
+      "admin-stock-transfer.png",
+      screenshotOptions,
+    );
+  });
+
+  test("shift history", async ({ page }) => {
+    await page.goto("/management/shift-history", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Riwayat Shift" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot(
+      "admin-shift-history.png",
+      screenshotOptions,
+    );
+  });
+
+  test("users", async ({ page }) => {
+    await page.goto("/management/users", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Daftar Pengguna" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-users.png", screenshotOptions);
+  });
+
+  test("master data", async ({ page }) => {
+    await page.goto("/management/master-data", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Master Data" })).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-master-data.png", screenshotOptions);
+  });
+
+  test("audit log", async ({ page }) => {
+    await page.goto("/management/audit-log", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { name: "Riwayat Aktivitas Sistem" }),
+    ).toBeVisible();
+    await settle(page);
+    await expect(page).toHaveScreenshot("admin-audit-log.png", screenshotOptions);
+  });
 });
