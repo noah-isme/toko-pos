@@ -167,6 +167,13 @@ export const refundSaleInputSchema = saleActionBaseInputSchema.extend({
     .number()
     .min(0, { message: "Nominal refund tidak boleh negatif" })
     .optional(),
+  requiresApproval: z.boolean().default(true),
+});
+
+export const approveRefundInputSchema = z.object({
+  refundId: z.string().min(1),
+  action: z.enum(["APPROVE", "REJECT"]),
+  reason: z.string().max(500).optional(),
 });
 
 export const saleActionOutputSchema = z.object({
@@ -180,6 +187,8 @@ export const saleActionOutputSchema = z.object({
 
 export const refundSaleOutputSchema = saleActionOutputSchema.extend({
   refundAmount: z.number(),
+  requiresApproval: z.boolean().optional(),
+  refundId: z.string().optional(),
 });
 
 export const dailySummaryInputSchema = z.object({

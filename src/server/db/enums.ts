@@ -3,6 +3,7 @@ export {
   PaymentMethod,
   Role,
   SaleStatus,
+  RefundStatus,
   StockMovementType,
   OutletRole,
   PromotionType,
