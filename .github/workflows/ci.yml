@@ -6,9 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+# Supersede in-flight runs for the same ref: this job provisions Postgres,
+# builds, and drives a browser suite, so stacked runs on rapid pushes are
+# expensive and only the newest result matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Without this a wedged browser test would hold a runner for the 6h default.
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -34,10 +43,12 @@ jobs:
         with:
           node-version: '20'
 
+      # Version comes from package.json "packageManager". Pinning 8 here while
+      # pnpm-lock.yaml is lockfileVersion 9.0 meant pnpm could not read the
+      # lockfile, which is why installs had to run --no-frozen-lockfile and
+      # silently re-resolved every dependency instead of using locked versions.
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
+        uses: pnpm/action-setup@v4
 
       - name: Cache pnpm store and Prisma artifacts
         uses: actions/cache@v4
@@ -54,7 +65,7 @@ jobs:
             ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
         run: pnpm run db:generate
@@ -99,9 +110,19 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: pnpm run test:unit
 
+      # Cache the browser binaries; `playwright install` skips the download when
+      # they are already present, so the step still runs to install OS deps.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Install Playwright browsers
-        # Install browsers required by Playwright so CI won't fail with missing executables
-        run: pnpm exec playwright install --with-deps
+        # Only chromium: playwright.config.ts defines no other project.
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run E2E tests (Playwright)
         # Blocking gate: the E2E suite was repaired in the e2e-repair pass and is

@@ -15,6 +15,7 @@ test.describe("Cashier Receipts", () => {
   test.setTimeout(120_000);
 
   test.beforeAll(async () => {
+    test.setTimeout(120_000);
     await ensureE2EUser();
 
     // Seed a transaction at the first outlet (the default selection on the
@@ -43,7 +44,7 @@ test.describe("Cashier Receipts", () => {
         },
       },
     });
-  }, 120_000);
+  });
 
   test.afterAll(async () => {
     await cleanupE2EData();

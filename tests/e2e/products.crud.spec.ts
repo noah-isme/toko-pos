@@ -16,6 +16,7 @@ test.describe("Products CRUD", () => {
   test.setTimeout(120_000);
 
   test.beforeAll(async () => {
+    test.setTimeout(120_000);
     await ensureE2EUser();
     const category = await getFirstCategory();
     const supplier = await getFirstSupplier();
@@ -27,7 +28,7 @@ test.describe("Products CRUD", () => {
     });
     testProductId = product.id;
     testProductName = product.name;
-  }, 120_000);
+  });
 
   test.afterAll(async () => {
     await cleanupE2EData();

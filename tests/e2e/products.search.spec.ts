@@ -6,8 +6,9 @@ test.describe("Products search and filter", () => {
   test.setTimeout(120_000);
 
   test.beforeAll(async () => {
+    test.setTimeout(120_000);
     await ensureE2EUser();
-  }, 120_000);
+  });
 
   test.afterAll(async () => {
     await cleanupE2EData();

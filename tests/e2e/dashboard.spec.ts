@@ -78,8 +78,12 @@ test.describe("Dashboard", () => {
     await setupTrpcMock(page, {
       "outlets.getUserOutlets": () => [userOutlet],
       "outlets.list": () => [userOutlet.outlet],
-      "cashSessions.getActive": ({ input }) =>
-        input?.outletId === activeShift.outletId ? activeShift : null,
+      // `input` arrives as `unknown` — one mock map serves procedures with
+      // different input shapes, so narrow it at the point of use.
+      "cashSessions.getActive": ({ input }) => {
+        const { outletId } = (input ?? {}) as { outletId?: string };
+        return outletId === activeShift.outletId ? activeShift : null;
+      },
       "sales.getDailySummary": () => ({
         date: new Date().toISOString(),
         totals: {
@@ -93,8 +97,10 @@ test.describe("Dashboard", () => {
         sales: [],
       }),
       "sales.listRecent": () => [],
-      "inventory.listLowStock": ({ input }) =>
-        input?.outletId === userOutlet.outlet.id ? alerts : [],
+      "inventory.listLowStock": ({ input }) => {
+        const { outletId } = (input ?? {}) as { outletId?: string };
+        return outletId === userOutlet.outlet.id ? alerts : [];
+      },
       "analytics.getSalesTrend": () => salesChartData,
       "analytics.getTopProducts": () => topProductsData,
       "tasks.getCashierTasks": () => ({ tasks: [], alerts: [], shiftActive: true }),
