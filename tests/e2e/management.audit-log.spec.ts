@@ -98,12 +98,17 @@ test.describe("Audit Log", () => {
     await page.goto("/management/audit-log");
 
     await expect(page.getByRole("heading", { name: "Riwayat Aktivitas Sistem" })).toBeVisible();
-    await expect(page.getByText("SALE_RECORD").first()).toBeVisible();
-    await expect(page.getByText("SHIFT_OPEN").first()).toBeVisible();
-    await expect(page.getByText("LOW_STOCK_TRIGGER").first()).toBeVisible();
-    await expect(page.getByText("Admin User").first()).toBeVisible();
-    await expect(page.getByText("Cashier User").first()).toBeVisible();
-    await expect(page.getByText("Outlet Pusat").first()).toBeVisible();
+
+    // Scope to the log table. The header's outlet switcher renders the same
+    // outlet name inside a <select> option, which Playwright reports as
+    // hidden, so an unscoped .first() resolves to that instead of the row.
+    const table = page.getByRole("table");
+    await expect(table.getByText("SALE_RECORD").first()).toBeVisible();
+    await expect(table.getByText("SHIFT_OPEN").first()).toBeVisible();
+    await expect(table.getByText("LOW_STOCK_TRIGGER").first()).toBeVisible();
+    await expect(table.getByText("Admin User").first()).toBeVisible();
+    await expect(table.getByText("Cashier User").first()).toBeVisible();
+    await expect(table.getByText("Outlet Pusat").first()).toBeVisible();
   });
 
   test("opens filter dialog", async ({ page }) => {
@@ -122,11 +127,14 @@ test.describe("Audit Log", () => {
     await page.getByRole("button", { name: "Lihat" }).first().click();
 
     await expect(page.getByRole("heading", { name: "Detail Entri Audit" })).toBeVisible();
-    await expect(page.getByText("SALE_RECORD").first()).toBeVisible();
-    await expect(page.getByText("Admin User").first()).toBeVisible();
-    await expect(page.getByText("Outlet Pusat").first()).toBeVisible();
-    await expect(page.getByText("SALE").first()).toBeVisible();
-    await expect(page.getByText("sale-123")).toBeVisible();
+
+    // Scope to the dialog, for the same reason as above.
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("SALE_RECORD").first()).toBeVisible();
+    await expect(dialog.getByText("Admin User").first()).toBeVisible();
+    await expect(dialog.getByText("Outlet Pusat").first()).toBeVisible();
+    await expect(dialog.getByText("SALE").first()).toBeVisible();
+    await expect(dialog.getByText("sale-123")).toBeVisible();
   });
 
   test("refresh button shows feedback", async ({ page }) => {

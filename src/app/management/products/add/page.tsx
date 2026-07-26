@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -65,17 +65,27 @@ export default function AddProductPage() {
 
   const [outletStocks, setOutletStocks] = useState<OutletStock[]>([]);
 
-  // Initialize outlet stocks when data loads
-  if (outletsQuery.data && outletStocks.length === 0) {
-    setOutletStocks(
-      outletsQuery.data.map((o) => ({
-        outletId: o.outletId,
-        outletName: o.outlet.name,
-        stock: 0,
-        minStock: 0,
-      })),
+  // Initialize outlet stocks when data loads.
+  //
+  // This used to call setOutletStocks() directly during render, guarded on
+  // `outletStocks.length === 0`. When getUserOutlets returns an empty array the
+  // mapped result is also empty, so the guard never became false and the page
+  // re-rendered until React bailed out with "Too many re-renders" (#301) — a
+  // hard crash for any user with no outlet assignments.
+  useEffect(() => {
+    const outlets = outletsQuery.data;
+    if (!outlets || outlets.length === 0) return;
+    setOutletStocks((prev) =>
+      prev.length > 0
+        ? prev
+        : outlets.map((o) => ({
+            outletId: o.outletId,
+            outletName: o.outlet.name,
+            stock: 0,
+            minStock: 0,
+          })),
     );
-  }
+  }, [outletsQuery.data]);
 
   const createMutation = api.products.upsert.useMutation({
     onSuccess: () => {

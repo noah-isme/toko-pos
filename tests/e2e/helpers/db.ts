@@ -250,6 +250,21 @@ export async function cleanupE2EData() {
   });
 }
 
+let exitHookRegistered = false;
+
+/**
+ * Deliberately does NOT disconnect immediately.
+ *
+ * `prisma` here is a module-level client shared by every spec, and Playwright
+ * runs spec files sequentially inside one worker process. Calling $disconnect()
+ * in a per-file afterAll tore down the connection that the *remaining* files
+ * still depend on, which showed up as tests passing alone but failing when run
+ * together. Defer the teardown to process exit, where it is actually safe.
+ */
 export async function disconnectDb() {
-  await prisma.$disconnect();
+  if (exitHookRegistered) return;
+  exitHookRegistered = true;
+  process.once("beforeExit", () => {
+    void prisma.$disconnect();
+  });
 }

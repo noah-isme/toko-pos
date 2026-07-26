@@ -196,7 +196,7 @@ export function SiteHeader({
             >
               <Search className="h-4 w-4 shrink-0" />
               <span className="truncate">Quick search...</span>
-              <kbd className="ml-auto hidden shrink-0 rounded bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm 2xl:inline-block">
+              <kbd className="ml-auto hidden shrink-0 rounded bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm xl:inline-block">
                 <Command className="mr-1 inline h-3 w-3" />K
               </kbd>
             </button>
@@ -266,7 +266,7 @@ export function SiteHeader({
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xs font-semibold text-white shadow-sm">
                     {initials}
                   </div>
-                  <div className="hidden min-w-0 flex-col items-start 2xl:flex">
+                  <div className="hidden min-w-0 flex-col items-start xl:flex">
                     <span className="max-w-[9rem] truncate text-sm font-medium">
                       {session?.user?.name}
                     </span>
@@ -274,7 +274,7 @@ export function SiteHeader({
                       {session?.user?.role}
                     </Badge>
                   </div>
-                  <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted-foreground 2xl:block" />
+                  <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted-foreground xl:block" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">

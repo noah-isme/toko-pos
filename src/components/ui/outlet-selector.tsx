@@ -122,7 +122,7 @@ export function OutletSelector({
       </div>
       <Badge
         variant="secondary"
-        className="hidden shrink-0 text-[10px] uppercase tracking-wide 2xl:inline-flex"
+        className="hidden shrink-0 text-[10px] uppercase tracking-wide xl:inline-flex"
       >
         {currentRole}
       </Badge>
