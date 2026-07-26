@@ -18,6 +18,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Mirror the session bypass in src/server/auth.ts (getServerAuthSession).
+  // E2E runs never mint a real JWT, so without this the middleware redirects
+  // every authenticated route to /auth/login before the bypass can apply, and
+  // the whole suite fails on missing page content.
+  if (process.env.NEXT_PUBLIC_E2E === 'true') {
+    return NextResponse.next();
+  }
+
   // Check for a valid next-auth token (session)
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 

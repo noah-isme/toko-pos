@@ -17,7 +17,6 @@ test.describe("Owner Dashboard", () => {
 
   test("renders owner dashboard heading", async ({ page }) => {
     await page.goto("/dashboard/owner");
-    await page.waitForLoadState("networkidle");
 
     await expect(
       page.getByRole("heading", { name: "Dashboard Owner", level: 1 }),
@@ -26,7 +25,6 @@ test.describe("Owner Dashboard", () => {
 
   test("displays KPI section", async ({ page }) => {
     await page.goto("/dashboard/owner");
-    await page.waitForLoadState("networkidle");
 
     // KPI cards or error banner — either confirms the section rendered.
     await expect(
@@ -36,14 +34,12 @@ test.describe("Owner Dashboard", () => {
 
   test("displays outlet filter", async ({ page }) => {
     await page.goto("/dashboard/owner");
-    await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("combobox").first()).toBeVisible();
   });
 
   test("renders charts section", async ({ page }) => {
     await page.goto("/dashboard/owner");
-    await page.waitForLoadState("networkidle");
 
     // Chart titles render after data loads; give them extra time.
     await expect(
@@ -53,7 +49,6 @@ test.describe("Owner Dashboard", () => {
 
   test("renders outlet performance section", async ({ page }) => {
     await page.goto("/dashboard/owner");
-    await page.waitForLoadState("networkidle");
 
     await expect(
       page.getByText("Performa Outlet"),
