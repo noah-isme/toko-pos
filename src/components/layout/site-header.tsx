@@ -55,10 +55,13 @@ import { isNavItemActive, visibleGroups } from "@/components/layout/nav-items";
 export function SiteHeader({
   className,
   hideBrand = false,
+  hasSidebar = false,
 }: {
   className?: string;
   /** The sidebar already shows the brand on desktop; avoid rendering it twice. */
   hideBrand?: boolean;
+  /** Sidebar is visible: left-align the column against it (see AppShell). */
+  hasSidebar?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -165,7 +168,12 @@ export function SiteHeader({
         className,
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+      <div
+        className={cn(
+          "mx-auto flex h-16 w-full max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8",
+          hasSidebar && "lg:ml-0",
+        )}
+      >
         {/* Left Section: Logo. `shrink-0`, not `flex-1` — with the nav moved to
             the sidebar this is empty on desktop, and a third of the bar was
             being reserved for nothing while the right side got squeezed. */}

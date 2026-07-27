@@ -45,10 +45,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           showSidebar && (collapsed ? "lg:pl-16" : "lg:pl-64"),
         )}
       >
-        <SiteHeader hideBrand={showSidebar} />
+        <SiteHeader hideBrand={showSidebar} hasSidebar={showSidebar} />
         <main
           id="main-content"
-          className="mx-auto w-full max-w-screen-2xl px-4 pb-10 pt-20 sm:px-6 lg:px-8"
+          className={cn(
+            "mx-auto w-full max-w-screen-2xl px-4 pb-10 pt-20 sm:px-6 lg:px-8",
+            // With the sidebar visible, pin the column to the sidebar edge
+            // instead of centering it: past ~1792px the post-sidebar space
+            // exceeds the 1536px cap, and mx-auto then shifts the column
+            // inward, leaving a lopsided gap on the left. The header inner
+            // div in SiteHeader applies the same rule; keep them in sync.
+            showSidebar && "lg:ml-0",
+          )}
         >
           <PageProgress />
           <PageTransition>{children}</PageTransition>
