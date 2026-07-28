@@ -53,6 +53,17 @@ export default function HomePage() {
       },
     );
 
+  // Last 7 days of revenue for the trend chart
+  const { data: weeklyTrend } = api.sales.getWeeklyTrend.useQuery(
+    { outletId: currentOutlet?.id },
+    {
+      enabled: Boolean(currentOutlet?.id),
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
+  );
+
   // Get low stock alerts
   const { data: lowStockAlerts } = api.inventory.listLowStock.useQuery(
     { outletId: currentOutlet?.id ?? "" },
@@ -92,7 +103,10 @@ export default function HomePage() {
           {/* Greeting & Actions */}
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1 flex-1">
-              <h1 className="text-2xl font-semibold text-gray-900 lg:text-3xl">
+              <h1
+                className="text-2xl font-semibold text-gray-900 lg:text-3xl"
+                data-testid="home-greeting"
+              >
                 {greeting}, {session?.user?.name || "User"} 👋
               </h1>
               <p className="text-sm text-gray-600">
@@ -101,8 +115,10 @@ export default function HomePage() {
                     <span className="font-medium">
                       {currentOutlet.name} ({currentOutlet.code})
                     </span>
-                    {" • "}
-                    {dateStr}
+                    <span data-testid="home-date">
+                      {" • "}
+                      {dateStr}
+                    </span>
                   </>
                 ) : (
                   "Pilih outlet untuk melihat data"
@@ -324,21 +340,13 @@ export default function HomePage() {
                   </Link>
                 </Button>
               </div>
-              {todaySummary?.sales && todaySummary.sales.length > 0 ? (
+              {weeklyTrend &&
+              weeklyTrend.series.some((point) => point.totalNet > 0) ? (
                 <RevenueTrendChart
-                  data={Array.from({ length: 7 }, (_, i) => {
-                    const date = new Date();
-                    date.setDate(date.getDate() - (6 - i));
-                    // Simulated data - in real app would come from API
-                    const dayRevenue =
-                      i === 6
-                        ? metrics.revenue
-                        : Math.random() * metrics.revenue * 1.5;
-                    return {
-                      date,
-                      revenue: dayRevenue,
-                    };
-                  })}
+                  data={weeklyTrend.series.map((point) => ({
+                    date: new Date(point.date),
+                    revenue: point.totalNet,
+                  }))}
                 />
               ) : (
                 <div className="h-48 flex items-center justify-center text-sm text-gray-500">

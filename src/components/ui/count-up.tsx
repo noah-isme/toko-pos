@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+
 type CountUpProps = {
   value: number;
   duration?: number;
@@ -80,13 +82,17 @@ export function AnimatedNumber({
 }: AnimatedNumberProps) {
   const [displayValue, setDisplayValue] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
+    // Under reduced motion the tween never starts; the render below shows the
+    // final value directly. Respects the accessibility setting and makes the
+    // output deterministic for visual tests.
+    if (!mounted || prefersReducedMotion) return;
 
     const duration = 800;
     const steps = 60;
@@ -105,9 +111,10 @@ export function AnimatedNumber({
     }, stepDuration);
 
     return () => clearInterval(timer);
-  }, [value, mounted, displayValue]);
+  }, [value, mounted, displayValue, prefersReducedMotion]);
 
-  const formattedValue = format ? format(displayValue) : displayValue.toFixed(0);
+  const rendered = prefersReducedMotion ? value : displayValue;
+  const formattedValue = format ? format(rendered) : rendered.toFixed(0);
 
   return <span className={className}>{formattedValue}</span>;
 }
