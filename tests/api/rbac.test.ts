@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Session } from "next-auth";
-import { OutletRole, Role } from "@prisma/client";
+import { OutletRole, PaymentMethod, Role } from "@prisma/client";
 import { endOfDay, startOfDay } from "date-fns";
 
 import { db } from "@/server/db";
@@ -108,6 +108,9 @@ describe("RBAC access checks", () => {
   });
 
   afterAll(async () => {
+    await db.cashSession.deleteMany({
+      where: { outletId: { in: [outletAId, outletBId] } },
+    });
     await db.stockMovement.deleteMany({
       where: { productId },
     });
@@ -221,6 +224,72 @@ describe("RBAC access checks", () => {
         note: "Negative test",
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("blocks cashiers from mutating global catalog and tax configuration", async () => {
+    const caller = await createCaller(buildSession(cashierUserId, Role.CASHIER));
+
+    await expect(
+      caller.inventory.setProductMinStock({ productId, minStock: 10 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(
+      caller.settings.upsertTaxSetting({
+        name: "Cashier must not create this",
+        rate: 11,
+        isActive: false,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(
+      caller.products.upsertCategory({ name: "Cashier category" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("allows admins to mutate global product configuration", async () => {
+    const caller = await createCaller(buildSession(adminUserId, Role.ADMIN));
+
+    const updated = await caller.inventory.setProductMinStock({
+      productId,
+      minStock: 4,
+    });
+    expect(updated.minStock).toBe(4);
+
+    await caller.inventory.setProductMinStock({ productId, minStock: 0 });
+  });
+
+  it("rejects a sale when stock is insufficient without changing inventory", async () => {
+    const caller = await createCaller(buildSession(cashierUserId, Role.CASHIER));
+    await caller.cashSessions.open({ outletId: outletAId, openingCash: 0 });
+
+    await expect(
+      caller.sales.recordSale({
+        outletId: outletAId,
+        receiptNumber: `RBAC-OVERSELL-${Date.now()}`,
+        discountTotal: 0,
+        applyTax: false,
+        taxMode: "EXCLUSIVE",
+        paperSize: "80MM",
+        items: [
+          {
+            productId,
+            quantity: 3,
+            unitPrice: 10000,
+            discount: 0,
+          },
+        ],
+        payments: [{ method: PaymentMethod.CASH, amount: 30000 }],
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    const inventory = await db.inventory.findUniqueOrThrow({
+      where: { productId_outletId: { productId, outletId: outletAId } },
+    });
+    expect(inventory.quantity).toBe(2);
+
+    await db.cashSession.deleteMany({
+      where: { outletId: outletAId, userId: cashierUserId, closeTime: null },
+    });
   });
 
   it("prevents transfer beyond available stock", async () => {

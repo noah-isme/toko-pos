@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerAuthSession } from "@/server/auth";
 import { db } from "@/server/db";
 import { Prisma } from "@prisma/client";
-import { Role } from "@/server/db/enums";
 import { writeAuditLog } from "@/server/services/audit";
+import { requireAdminOrOwnerSession } from "@/server/api/utils/http-access";
+import { hasValidOutletStocks } from "@/server/api/utils/product-rest";
 
 // GET /api/products/[id] - Get product by ID
 export async function GET(
@@ -111,46 +112,24 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireAdminOrOwnerSession();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const { session } = auth;
 
     const { id } = await params;
     const body = await request.json();
 
+    if (!hasValidOutletStocks(body.outlets)) {
+      return NextResponse.json(
+        { error: "Outlet stock must be a non-negative integer" },
+        { status: 400 },
+      );
+    }
+
     console.log("Updating product:", id);
     console.log("Request body:", JSON.stringify(body, null, 2));
-
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        role: true,
-        userOutlets: {
-          where: { isActive: true },
-          select: { outletId: true },
-        },
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    if (user.role === Role.CASHIER && Array.isArray(body.outlets)) {
-      const allowed = new Set(user.userOutlets.map((uo) => uo.outletId));
-      const unauthorized = body.outlets.find(
-        (outlet: { outletId?: string }) =>
-          typeof outlet.outletId === "string" && !allowed.has(outlet.outletId),
-      );
-
-      if (unauthorized) {
-        return NextResponse.json(
-          { error: "Forbidden" },
-          { status: 403 },
-        );
-      }
-    }
 
     // Validate required fields
     if (!body.name || !body.sku) {
@@ -279,10 +258,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireAdminOrOwnerSession();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const { session } = auth;
 
     const { id } = await params;
 

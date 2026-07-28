@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerAuthSession } from "@/server/auth";
 import { uploadProductImage, validateImageFile } from "@/lib/storage";
+import { requireAdminOrOwnerSession } from "@/server/api/utils/http-access";
 
 // POST /api/products/upload-image - Upload a product image
 // Accepts multipart/form-data with a single "file" field. When Supabase is
@@ -8,9 +8,9 @@ import { uploadProductImage, validateImageFile } from "@/lib/storage";
 // URL. Otherwise returns a base64 data URL so dev/mock mode stays functional.
 export async function POST(request: Request) {
   try {
-    const session = await getServerAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireAdminOrOwnerSession();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     const formData = await request.formData();

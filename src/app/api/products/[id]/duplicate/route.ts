@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerAuthSession } from "@/server/auth";
 import { db } from "@/server/db";
-import { Prisma } from "@prisma/client";
+import { requireAdminOrOwnerSession } from "@/server/api/utils/http-access";
 
 // POST /api/products/[id]/duplicate - Duplicate product
 export async function POST(
@@ -9,9 +8,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireAdminOrOwnerSession();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     const { id } = await params;

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 
 import { getServerAuthSession } from "@/server/auth";
 import {
+  assertAdminOrOwner,
   assertOutletAccess,
   ensureCashierOutletAccess,
   getUserAccess,
@@ -59,6 +60,22 @@ const enforceUserIsAuthed = t.middleware(({ ctx, next }) => {
   return next({
     ctx: {
       session: ctx.session,
+    },
+  });
+});
+
+const enforceUserIsAdminOrOwner = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.session?.user) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  const outletAccess = await getUserAccess(ctx.session.user.id);
+  assertAdminOrOwner(outletAccess.role);
+
+  return next({
+    ctx: {
+      session: ctx.session,
+      outletAccess,
     },
   });
 });
@@ -125,6 +142,7 @@ export const requireActiveShift = <TInput>(
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(enforceUserIsAuthed);
+export const adminProcedure = t.procedure.use(enforceUserIsAdminOrOwner);
 
 /**
  * Default shape for resolvers that pull outlet id(s) off the validated input.

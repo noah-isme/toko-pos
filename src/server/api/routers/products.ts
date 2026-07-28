@@ -28,6 +28,7 @@ import {
 import { z } from "zod";
 import { db } from "@/server/db";
 import {
+  adminProcedure,
   getOutletAccessFromContext,
   protectedOutletProcedure,
   protectedProcedure,
@@ -366,7 +367,7 @@ export const productsRouter = router({
         price: Number(product.price),
       });
     }),
-  upsert: protectedProcedure
+  upsert: adminProcedure
     .input(productUpsertInputSchema)
     .output(productUpsertOutputSchema)
     .mutation(async ({ input }) => {
@@ -469,7 +470,7 @@ export const productsRouter = router({
       })),
     );
   }),
-  upsertCategory: protectedProcedure
+  upsertCategory: adminProcedure
     .input(upsertCategoryInputSchema)
     .output(categorySchema)
     .mutation(async ({ input }) => {
@@ -497,7 +498,7 @@ export const productsRouter = router({
         updatedAt: category.updatedAt.toISOString(),
       });
     }),
-  deleteCategory: protectedProcedure
+  deleteCategory: adminProcedure
     .input(deleteCategoryInputSchema)
     .output(simpleSuccessSchema)
     .mutation(async ({ input }) => {
@@ -541,7 +542,7 @@ export const productsRouter = router({
       })),
     );
   }),
-  upsertSupplier: protectedProcedure
+  upsertSupplier: adminProcedure
     .input(upsertSupplierInputSchema)
     .output(supplierSchema)
     .mutation(async ({ input }) => {
@@ -570,7 +571,7 @@ export const productsRouter = router({
         updatedAt: supplier.updatedAt.toISOString(),
       });
     }),
-  deleteSupplier: protectedProcedure
+  deleteSupplier: adminProcedure
     .input(deleteSupplierInputSchema)
     .output(simpleSuccessSchema)
     .mutation(async ({ input }) => {

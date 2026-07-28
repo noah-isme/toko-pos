@@ -22,7 +22,10 @@ export async function middleware(req: NextRequest) {
   // E2E runs never mint a real JWT, so without this the middleware redirects
   // every authenticated route to /auth/login before the bypass can apply, and
   // the whole suite fails on missing page content.
-  if (process.env.NEXT_PUBLIC_E2E === 'true') {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_E2E === 'true'
+  ) {
     return NextResponse.next();
   }
 

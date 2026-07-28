@@ -8,7 +8,12 @@ import {
   upsertTaxSettingInputSchema,
 } from "@/server/api/schemas/settings";
 import { db } from "@/server/db";
-import { protectedProcedure, publicProcedure, router } from "@/server/api/trpc";
+import {
+  adminProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+} from "@/server/api/trpc";
 
 const toDecimal = (value: number) => new Prisma.Decimal(value.toFixed(2));
 
@@ -33,7 +38,7 @@ export const settingsRouter = router({
         })),
       );
     }),
-  upsertTaxSetting: protectedProcedure
+  upsertTaxSetting: adminProcedure
     .input(upsertTaxSettingInputSchema)
     .output(taxSettingSchema.pick({ id: true }))
     .mutation(async ({ input }) => {
@@ -72,7 +77,7 @@ export const settingsRouter = router({
         });
       });
     }),
-  activateTaxSetting: protectedProcedure
+  activateTaxSetting: adminProcedure
     .input(activateTaxSettingInputSchema)
     .output(simpleSuccessSchema)
     .mutation(async ({ input }) => {

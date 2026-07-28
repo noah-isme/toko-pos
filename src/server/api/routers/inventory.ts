@@ -3,9 +3,9 @@ import { z } from "zod";
 
 import { db } from "@/server/db";
 import {
+  adminProcedure,
   getOutletAccessFromContext,
   protectedOutletProcedure,
-  protectedProcedure,
   requireOutletAccess,
   router,
 } from "@/server/api/trpc";
@@ -58,7 +58,7 @@ export const inventoryRouter = router({
         }),
       );
     }),
-  setProductMinStock: protectedProcedure
+  setProductMinStock: adminProcedure
     .input(
       z.object({
         productId: z.string().min(1),

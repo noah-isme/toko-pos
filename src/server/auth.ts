@@ -36,6 +36,10 @@ try {
     "Error importing local runtime modules (env/db):",
     (e as Error)?.stack ?? String(e),
   );
+  if (process.env.NODE_ENV !== "test") {
+    throw e;
+  }
+
   // Mark test fallback so tests can detect we are using a stubbed runtime.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as unknown as Record<string, unknown>).__TEST_FALLBACKS__ = true;
@@ -191,12 +195,16 @@ try {
     "Failed to initialize NextAuth:",
     (err as Error)?.stack ?? String(err),
   );
-  // Fallback handler returns a 500 JSON so the client sees a clear error
-  handler = async (req: Request) =>
-    new Response(
-      JSON.stringify({ message: "NextAuth initialization failed" }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+  if (process.env.NODE_ENV !== "test") {
+    throw err;
+  }
+
+  // Tests may import auth without a complete Next.js request runtime.
+  handler = async () =>
+    new Response(JSON.stringify({ message: "NextAuth initialization failed" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
 }
 
 // Export the NextAuth handler for the App Router. Use aliasing instead of
@@ -260,7 +268,10 @@ async function invokeHandlerSafely(req: Request) {
 import type { Session } from "next-auth";
 
 export const getServerAuthSession = async () => {
-  if (process.env.NEXT_PUBLIC_E2E === "true") {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_E2E === "true"
+  ) {
     const session: Session = {
       user: {
         id: "e2e-user",

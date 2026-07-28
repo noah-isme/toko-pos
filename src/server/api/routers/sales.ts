@@ -574,45 +574,49 @@ export const salesRouter = router({
             });
           }
 
-          await Promise.all(
-            input.items.map(async (item) => {
-              const inventory = await tx.inventory.upsert({
-                where: {
-                  productId_outletId: {
-                    productId: item.productId,
-                    outletId: input.outletId,
-                  },
-                },
-                create: {
+          for (const item of input.items) {
+            const updated = await tx.inventory.updateMany({
+              where: {
+                productId: item.productId,
+                outletId: input.outletId,
+                quantity: { gte: item.quantity },
+              },
+              data: {
+                quantity: { decrement: item.quantity },
+              },
+            });
+
+            if (updated.count !== 1) {
+              throw new SaleValidationError(
+                `Stok tidak mencukupi untuk produk ${item.productId}.`,
+              );
+            }
+
+            const inventory = await tx.inventory.findUniqueOrThrow({
+              where: {
+                productId_outletId: {
                   productId: item.productId,
                   outletId: input.outletId,
-                  quantity: -item.quantity,
-                  costPrice: toDecimal(item.unitPrice),
                 },
-                update: {
-                  quantity: {
-                    decrement: item.quantity,
-                  },
-                },
-              });
+              },
+            });
 
-              await tx.stockMovement.create({
-                data: {
-                  inventoryId: inventory.id,
-                  type: "SALE",
-                  quantity: -item.quantity,
-                  reference: createdSale.id,
-                  note: `Penjualan ${createdSale.receiptNumber}`,
-                  createdById: ctx.session?.user.id,
-                  productId: item.productId,
-                  outletId: input.outletId,
-                  relatedSaleId: createdSale.id,
-                },
-              });
+            await tx.stockMovement.create({
+              data: {
+                inventoryId: inventory.id,
+                type: "SALE",
+                quantity: -item.quantity,
+                reference: createdSale.id,
+                note: `Penjualan ${createdSale.receiptNumber}`,
+                createdById: ctx.session?.user.id,
+                productId: item.productId,
+                outletId: input.outletId,
+                relatedSaleId: createdSale.id,
+              },
+            });
 
-              affectedKeys.add(`${item.productId}:${input.outletId}`);
-            }),
-          );
+            affectedKeys.add(`${item.productId}:${input.outletId}`);
+          }
 
           return createdSale;
         });

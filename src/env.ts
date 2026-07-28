@@ -4,7 +4,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
   SHADOW_DATABASE_URL: z.string().url().optional(),
   NEXTAUTH_URL: z.string().url().optional(),
-  NEXTAUTH_SECRET: z.string().min(1).default("dev-secret"),
+  NEXTAUTH_SECRET: z.string().min(1).optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   EMAIL_SERVER_HOST: z.string().min(1).optional(),
@@ -110,7 +110,19 @@ if (!parsed.success) {
   throw new Error("Missing or invalid environment configuration");
 }
 
-export const env = parsed.data;
+if (
+  process.env.NODE_ENV === "production" &&
+  (!parsed.data.NEXTAUTH_SECRET || parsed.data.NEXTAUTH_SECRET.length < 32)
+) {
+  throw new Error(
+    "NEXTAUTH_SECRET must contain at least 32 characters in production",
+  );
+}
+
+export const env = {
+  ...parsed.data,
+  NEXTAUTH_SECRET: parsed.data.NEXTAUTH_SECRET ?? "dev-secret",
+};
 
 /**
  * The effective public Supabase key for browser/client use.
