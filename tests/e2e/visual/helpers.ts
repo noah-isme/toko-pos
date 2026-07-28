@@ -2,9 +2,10 @@ import type { Page } from "@playwright/test";
 import { encode } from "next-auth/jwt";
 
 import { defineTrpcMocks, setupTrpcMock } from "../mocks";
+import { e2eAuthSecret } from "../helpers/test-secret";
 
 const ADMIN_EMAIL = "admin@example.com";
-const SECRET = process.env.NEXTAUTH_SECRET ?? "test-secret";
+const SECRET = e2eAuthSecret();
 /** Mirrors `use.baseURL` in playwright.config.ts. */
 const BASE_URL = `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
 
@@ -48,7 +49,9 @@ export async function settle(page: Page) {
     [data-testid="header-clock"],
     [data-testid="date-range-label"],
     [data-testid="report-date-label"],
-    [data-testid="relative-time"] { visibility: hidden !important; }`,
+    [data-testid="relative-time"],
+    [data-testid="home-greeting"],
+    [data-testid="home-date"] { visibility: hidden !important; }`,
   });
 
   // Recharts animates through react-smooth's requestAnimationFrame loop, which

@@ -8,6 +8,8 @@ import {
 } from "@prisma/client";
 import { encode } from "next-auth/jwt";
 
+import { e2eAuthSecret } from "./test-secret";
+
 const E2E_USER_ID = "e2e-user";
 const E2E_PREFIX = "E2E-";
 const E2E_EMAIL_PREFIX = "e2e-";
@@ -25,7 +27,7 @@ export { prisma, Role, OutletRole, PaymentMethod, SaleStatus, StockMovementType 
  */
 export async function setE2ESessionCookie(page: import("@playwright/test").Page) {
   const token = await encode({
-    secret: process.env.NEXTAUTH_SECRET ?? "test-secret",
+    secret: e2eAuthSecret(),
     token: {
       sub: E2E_USER_ID,
       name: E2E_SESSION_NAME,
