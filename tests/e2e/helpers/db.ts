@@ -9,6 +9,7 @@ import {
 import { encode } from "next-auth/jwt";
 
 import { e2eAuthSecret } from "./test-secret";
+import { upsertTolerantOfRace } from "./upsert-race";
 
 const E2E_USER_ID = "e2e-user";
 const E2E_PREFIX = "E2E-";
@@ -59,32 +60,6 @@ export function e2eEmail(label: string): string {
 // Seed only once per worker process — the flag persists across test files
 // because Playwright runs all files in the same worker process.
 let e2eUserSeeded = false;
-
-/**
- * Prisma's `upsert` is not atomic across connections: it reads, then writes. Two
- * Playwright workers seeding the same fixed-id row at the same time both miss on
- * the read and both attempt the insert, so the loser gets P2002 and its whole
- * file fails in `beforeAll`. Retrying once is enough, because by then the winner
- * has committed and the read hits.
- */
-const UNIQUE_CONSTRAINT = "P2002";
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: string }).code === UNIQUE_CONSTRAINT
-  );
-}
-
-async function upsertTolerantOfRace<T>(operation: () => Promise<T>): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) throw error;
-    return operation();
-  }
-}
 
 export async function ensureE2EUser() {
   if (e2eUserSeeded) return;
