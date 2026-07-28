@@ -60,33 +60,63 @@ export function e2eEmail(label: string): string {
 // because Playwright runs all files in the same worker process.
 let e2eUserSeeded = false;
 
+/**
+ * Prisma's `upsert` is not atomic across connections: it reads, then writes. Two
+ * Playwright workers seeding the same fixed-id row at the same time both miss on
+ * the read and both attempt the insert, so the loser gets P2002 and its whole
+ * file fails in `beforeAll`. Retrying once is enough, because by then the winner
+ * has committed and the read hits.
+ */
+const UNIQUE_CONSTRAINT = "P2002";
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === UNIQUE_CONSTRAINT
+  );
+}
+
+async function upsertTolerantOfRace<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+    return operation();
+  }
+}
+
 export async function ensureE2EUser() {
   if (e2eUserSeeded) return;
 
-  const user = await prisma.user.upsert({
-    where: { id: E2E_USER_ID },
-    create: {
-      id: E2E_USER_ID,
-      name: "E2E Tester",
-      email: "e2e-user@toko-pos.test",
-      role: Role.ADMIN,
-    },
-    update: {},
-  });
+  const user = await upsertTolerantOfRace(() =>
+    prisma.user.upsert({
+      where: { id: E2E_USER_ID },
+      create: {
+        id: E2E_USER_ID,
+        name: "E2E Tester",
+        email: "e2e-user@toko-pos.test",
+        role: Role.ADMIN,
+      },
+      update: {},
+    }),
+  );
 
   const outlets = await prisma.outlet.findMany({ orderBy: { name: "asc" } });
   for (const outlet of outlets) {
-    await prisma.userOutlet.upsert({
-      where: {
-        userId_outletId: { userId: E2E_USER_ID, outletId: outlet.id },
-      },
-      create: {
-        userId: E2E_USER_ID,
-        outletId: outlet.id,
-        role: OutletRole.MANAGER,
-      },
-      update: {},
-    });
+    await upsertTolerantOfRace(() =>
+      prisma.userOutlet.upsert({
+        where: {
+          userId_outletId: { userId: E2E_USER_ID, outletId: outlet.id },
+        },
+        create: {
+          userId: E2E_USER_ID,
+          outletId: outlet.id,
+          role: OutletRole.MANAGER,
+        },
+        update: {},
+      }),
+    );
   }
 
   e2eUserSeeded = true;
