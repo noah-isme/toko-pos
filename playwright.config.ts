@@ -55,6 +55,10 @@ export default defineConfig({
     env: {
       NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "test-secret",
       NEXT_PUBLIC_E2E: usesRealVisualAuth ? "false" : "true",
+      // Explicit, server-only opt-in for the auth bypass (src/lib/e2e-bypass.ts).
+      // Set only here, never in .env or a deployment. Visual runs authenticate
+      // for real, so they must not get it.
+      ...(usesRealVisualAuth ? {} : { E2E_AUTH_BYPASS: "true" }),
       NEXTAUTH_URL: `http://127.0.0.1:${PORT}`,
       // Only forward DATABASE_URL when the environment actually sets it. Keys
       // listed here override the server's own .env loading, so a localhost

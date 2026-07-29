@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
+import { isE2EAuthBypassEnabled } from '@/lib/e2e-bypass';
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -22,10 +24,7 @@ export async function middleware(req: NextRequest) {
   // E2E runs never mint a real JWT, so without this the middleware redirects
   // every authenticated route to /auth/login before the bypass can apply, and
   // the whole suite fails on missing page content.
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    process.env.NEXT_PUBLIC_E2E === 'true'
-  ) {
+  if (isE2EAuthBypassEnabled()) {
     return NextResponse.next();
   }
 

@@ -44,16 +44,7 @@ const CUSTOMERS = [
   },
 ];
 
-// BLOCKED, not flaky. `next start` forces NODE_ENV=production, but the E2E
-// session bypass in middleware.ts and getServerAuthSession() is gated on
-// `NODE_ENV !== 'production'`, so it never runs in the mode this suite uses.
-// Every authenticated route answers 307 to /auth/login before the page renders,
-// which is the same reason ~10 other non-visual specs fail on main. Verified by
-// curl against a production build: /management/customers responds
-// `location: /auth/login?callbackUrl=...`.
-// Remove this skip once the bypass is fixed; the assertions below are written
-// against the real page and should pass as soon as the route is reachable.
-test.describe.skip("Customers & loyalty management", () => {
+test.describe("Customers & loyalty management", () => {
   test.beforeEach(async ({ page }) => {
     await mockAuthSession(page);
 

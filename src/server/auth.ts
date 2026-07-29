@@ -8,6 +8,8 @@ import NextAuthDefault, {
   getServerSession as _getServerSession,
 } from "next-auth";
 
+import { e2eBypassSession, isE2EAuthBypassEnabled } from "@/lib/e2e-bypass";
+
 const NextAuth = NextAuthDefault;
 const getServerSession = _getServerSession;
 
@@ -268,22 +270,8 @@ async function invokeHandlerSafely(req: Request) {
 import type { Session } from "next-auth";
 
 export const getServerAuthSession = async () => {
-  if (
-    process.env.NODE_ENV !== "production" &&
-    process.env.NEXT_PUBLIC_E2E === "true"
-  ) {
-    const session: Session = {
-      user: {
-        id: "e2e-user",
-        role: Role.ADMIN,
-        name: "Kasir Uji",
-        email: "kasir@example.com",
-        image: null,
-      },
-      expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    };
-
-    return session;
+  if (isE2EAuthBypassEnabled()) {
+    return e2eBypassSession() as Session;
   }
 
   return getServerSession(authOptions);
