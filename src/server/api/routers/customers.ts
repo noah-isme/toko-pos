@@ -181,28 +181,38 @@ const mapRefundApproval = (refund: {
 export const customersRouter = router({
   list: requireOutletAccess(({ input }) => input.outletId)
     .input(customerListInputSchema)
-    .query(async ({ input, ctx }) => {
-      const outletAccess = getOutletAccessFromContext(ctx);
+    .query(async ({ input }) => {
       const { outletId, search, tier, isActive, take, cursor } = input;
 
-      const where: Record<string, unknown> = {
-        sales: { some: { outletId } },
-      };
+      // A Customer has no outletId of its own, so "belongs to this outlet" can
+      // only be derived from its sales. Customers created but not yet served
+      // have no sales at all, and scoping on `sales: { some: { outletId } }`
+      // alone would hide them from the very page that just created them.
+      const conditions: Prisma.CustomerWhereInput[] = [
+        {
+          OR: [
+            { sales: { some: { outletId } } },
+            { sales: { none: {} } },
+          ],
+        },
+      ];
 
       if (search) {
-        where.OR = [
-          { name: { contains: search, mode: "insensitive" } },
-          { email: { contains: search, mode: "insensitive" } },
-          { phone: { contains: search, mode: "insensitive" } },
-          { membershipCard: { contains: search, mode: "insensitive" } },
-        ];
+        conditions.push({
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { phone: { contains: search, mode: "insensitive" } },
+            { membershipCard: { contains: search, mode: "insensitive" } },
+          ],
+        });
       }
 
-      if (tier) where.tier = tier;
-      if (isActive !== undefined) where.isActive = isActive;
+      if (tier) conditions.push({ tier });
+      if (isActive !== undefined) conditions.push({ isActive });
 
       const customers = await db.customer.findMany({
-        where,
+        where: { AND: conditions },
         take: take + 1,
         cursor: cursor ? { id: cursor } : undefined,
         orderBy: { createdAt: "desc" },
