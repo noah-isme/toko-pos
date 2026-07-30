@@ -152,11 +152,12 @@ deterministik agar baseline tetap stabil di lingkungan lokal dan CI.
 - `src/app/management/stock-opname/page.tsx` – Stock opname dengan alur terpandu 3 langkah.
 - `src/app/management/receiving/page.tsx` – Penerimaan barang dari supplier.
 - `src/app/management/users/page.tsx` – Manajemen user dengan RBAC dan penugasan outlet.
+- `src/app/management/customers/page.tsx` – Manajemen pelanggan & loyalitas (tier keanggotaan, saldo poin, pencarian, penyesuaian poin).
 - `src/app/management/audit-log/page.tsx` – Log audit aktivitas admin.
 - `src/app/management/promotions/page.tsx` – Manajemen promosi.
 - `src/app/docs/implementation/page.tsx` – Panduan implementasi langkah demi langkah.
 - `src/app/docs/persiapan-awal/page.tsx` – Checklist persiapan awal yang mendetail (tujuan, alur kasir, role, outlet).
-- `src/server/api` – Router tRPC (`sales`, `products`, `outlets`, `settings`, `inventory`, `analytics`, `promotions`, `tasks`, `users`, `cashSessions`).
+- `src/server/api` – Router tRPC (`sales`, `products`, `outlets`, `settings`, `inventory`, `analytics`, `promotions`, `tasks`, `users`, `cashSessions`, `customers`, `approvals`).
 - `prisma/schema.prisma` – Skema database beserta enum Role dan PaymentMethod.
 - `scripts/seed-supabase.mjs` – Script impor CSV ke Supabase.
 - `data/initial-products.csv` – Dataset awal untuk script seed.

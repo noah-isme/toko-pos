@@ -330,6 +330,15 @@ export function SiteHeader({
                 {(session?.user?.role === "OWNER" ||
                   session?.user?.role === "ADMIN") && (
                   <DropdownMenuItem asChild>
+                    <Link href="/management/customers">
+                      <Users className="mr-2 h-4 w-4" />
+                      Pelanggan
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {(session?.user?.role === "OWNER" ||
+                  session?.user?.role === "ADMIN") && (
+                  <DropdownMenuItem asChild>
                     <Link href="/management/audit-log">
                       <ScrollText className="mr-2 h-4 w-4" />
                       Log Audit
