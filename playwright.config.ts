@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { e2eAuthSecret } from "./tests/e2e/helpers/test-secret";
+
 const PORT = process.env.PORT ?? "3000";
 const usesRealVisualAuth = process.env.PLAYWRIGHT_VISUAL_AUTH === "true";
 
@@ -53,7 +55,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI && !usesRealVisualAuth,
     timeout: 120_000,
     env: {
-      NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "test-secret",
+      NEXTAUTH_SECRET: e2eAuthSecret(),
       NEXT_PUBLIC_E2E: usesRealVisualAuth ? "false" : "true",
       // Explicit, server-only opt-in for the auth bypass (src/lib/e2e-bypass.ts).
       // Set only here, never in .env or a deployment. Visual runs authenticate

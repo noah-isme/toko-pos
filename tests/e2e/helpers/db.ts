@@ -8,6 +8,9 @@ import {
 } from "@prisma/client";
 import { encode } from "next-auth/jwt";
 
+import { e2eAuthSecret } from "./test-secret";
+import { upsertTolerantOfRace } from "./upsert-race";
+
 const E2E_USER_ID = "e2e-user";
 const E2E_PREFIX = "E2E-";
 const E2E_EMAIL_PREFIX = "e2e-";
@@ -25,7 +28,7 @@ export { prisma, Role, OutletRole, PaymentMethod, SaleStatus, StockMovementType 
  */
 export async function setE2ESessionCookie(page: import("@playwright/test").Page) {
   const token = await encode({
-    secret: process.env.NEXTAUTH_SECRET ?? "test-secret",
+    secret: e2eAuthSecret(),
     token: {
       sub: E2E_USER_ID,
       name: E2E_SESSION_NAME,
@@ -61,30 +64,34 @@ let e2eUserSeeded = false;
 export async function ensureE2EUser() {
   if (e2eUserSeeded) return;
 
-  const user = await prisma.user.upsert({
-    where: { id: E2E_USER_ID },
-    create: {
-      id: E2E_USER_ID,
-      name: "E2E Tester",
-      email: "e2e-user@toko-pos.test",
-      role: Role.ADMIN,
-    },
-    update: {},
-  });
+  const user = await upsertTolerantOfRace(() =>
+    prisma.user.upsert({
+      where: { id: E2E_USER_ID },
+      create: {
+        id: E2E_USER_ID,
+        name: "E2E Tester",
+        email: "e2e-user@toko-pos.test",
+        role: Role.ADMIN,
+      },
+      update: {},
+    }),
+  );
 
   const outlets = await prisma.outlet.findMany({ orderBy: { name: "asc" } });
   for (const outlet of outlets) {
-    await prisma.userOutlet.upsert({
-      where: {
-        userId_outletId: { userId: E2E_USER_ID, outletId: outlet.id },
-      },
-      create: {
-        userId: E2E_USER_ID,
-        outletId: outlet.id,
-        role: OutletRole.MANAGER,
-      },
-      update: {},
-    });
+    await upsertTolerantOfRace(() =>
+      prisma.userOutlet.upsert({
+        where: {
+          userId_outletId: { userId: E2E_USER_ID, outletId: outlet.id },
+        },
+        create: {
+          userId: E2E_USER_ID,
+          outletId: outlet.id,
+          role: OutletRole.MANAGER,
+        },
+        update: {},
+      }),
+    );
   }
 
   e2eUserSeeded = true;

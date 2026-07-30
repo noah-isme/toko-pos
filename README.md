@@ -191,15 +191,31 @@ Notes:
 - CI already runs the Playwright browser install step before executing tests. If you add or change Playwright versions, re-run the install command.
 - If your environment blocks downloads, install only chromium with `pnpm exec playwright install chromium`.
 
-Visual regression memakai sesi NextAuth admin dan tidak bergantung pada data
-demo atau database eksternal. Jalankan:
+Visual regression memakai sesi NextAuth admin dengan seluruh tRPC dimock, jadi
+tidak bergantung pada data demo atau database eksternal. Jalankan:
 
 ```bash
+pnpm run build            # baseline harus direkam dari bundle produksi
 pnpm run test:e2e:visual
 
 # Perbarui baseline setelah perubahan UI yang disengaja
 pnpm run test:e2e:visual:update
 ```
+
+Catatan penting:
+- Suite ini selalu menjalankan server sendiri (`reuseExistingServer: false`)
+  karena butuh bypass sesi E2E dalam kondisi mati. Kalau port 3000 sudah
+  dipakai proses lain, jalankan dengan `PORT=3100 pnpm run test:e2e:visual`.
+- `next start` berjalan dengan `NODE_ENV=production`, dan `src/env.ts` menolak
+  `NEXTAUTH_SECRET` yang kurang dari 32 karakter. Fallback bersama ada di
+  `tests/e2e/helpers/test-secret.ts`; jangan ganti dengan nilai pendek, karena
+  gejalanya hanya berupa timeout `webServer` tanpa penjelasan.
+- Semua teks yang berasal dari jam dinding (jam di header, label tanggal, sapaan
+  di home) disembunyikan oleh `settle()` di `tests/e2e/visual/helpers.ts`. Kalau
+  menambah elemen serupa, tambahkan `data-testid`-nya ke daftar itu, bukan
+  merekam ulang baseline setiap hari.
+- Baseline direkam di mesin developer. Font stack CI berbeda, sehingga langkah
+  visual di CI masih `continue-on-error`.
 
 
 ## Deploy
