@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
+import { env } from '@/env';
 import { isE2EAuthBypassEnabled } from '@/lib/e2e-bypass';
 
 export async function middleware(req: NextRequest) {
@@ -28,8 +29,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for a valid next-auth token (session)
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  // Check for a valid next-auth token (session) — use the same trusted env source as auth handler
+  const token = await getToken({ req, secret: env.NEXTAUTH_SECRET });
 
   if (!token) {
     // Not authenticated — redirect to login with callback back to original URL

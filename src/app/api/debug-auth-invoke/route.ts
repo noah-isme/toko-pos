@@ -22,18 +22,18 @@ export async function GET() {
 
   try {
     const auth = await import('@/server/auth');
-    if (typeof auth.GET !== 'function' && typeof auth.handler !== 'function') {
+    if (typeof auth.handler !== 'function') {
       return new Response(JSON.stringify({ ok: false, reason: 'no handler' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const fn = typeof auth.GET === 'function' ? auth.GET : auth.handler;
+    const fn = auth.handler;
 
     // Build a request-like object resembling the shape NextAuth expects.
     // Create a real Request so the handler receives an instance of Request.
     const authReq = new Request('http://localhost/api/auth/providers', { method: 'GET' });
 
     try {
-      const res = await fn(authReq as Request);
+      const res = await fn(authReq);
       // If the result looks like a Response-like with a text() method, read it.
       if (res && typeof (res as { text?: unknown }).text === 'function') {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call

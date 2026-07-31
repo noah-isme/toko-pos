@@ -209,26 +209,13 @@ try {
     });
 }
 
-// Export the NextAuth handler for the App Router. Use aliasing instead of
-// destructuring: the handler function should be exported as both GET and POST
-// so Next.js can call it for requests to /api/auth/* (including /session).
-// The NextAuth internals sometimes expect a `req` object that has a
-// `query.nextauth` array (the catch-all segments). To be resilient when the
-// runtime passes a plain Fetch Request, provide small adapter wrappers that
-// build an auth-shaped request and then call the NextAuth handler.
+// Build an auth-shaped request from a Next.js Request object.
+// NextAuth expects the old API-route style req with query, text(), json(), etc.
 async function buildAuthReq(req: Request) {
   const url = new URL(req.url);
   const segments = url.pathname.split("/").filter(Boolean).slice(2);
   const text = await req.text().catch(() => "");
-  const authReq: {
-    method: string;
-    headers: Headers;
-    body: string;
-    url: string;
-    query: { nextauth: string[] };
-    text: () => Promise<string>;
-    json: () => Promise<unknown> | null;
-  } = {
+  return {
     method: req.method,
     headers: req.headers,
     body: text,
@@ -243,29 +230,10 @@ async function buildAuthReq(req: Request) {
       }
     },
   };
-  return authReq;
 }
 
-// Export the NextAuth handler directly for the App Router. This matches the
-// canonical pattern NextAuth expects in app-route handlers.
-export { handler as GET, handler as POST };
-// Also export the raw handler for programmatic use
+// Export the raw NextAuth handler for use in App Router route files.
 export { handler };
-
-// Wrap the handler to log invocation errors with stack traces for easier
-// debugging when endpoints are called.
-async function invokeHandlerSafely(req: Request) {
-  try {
-    // Handler has a generic signature; cast to unknown when invoking.
-    return await (handler as (r: unknown) => Promise<unknown>)(req);
-  } catch (err) {
-    console.error(
-      "[server/auth] handler invocation error:",
-      (err as Error)?.stack ?? String(err),
-    );
-    throw err;
-  }
-}
 
 import type { Session } from "next-auth";
 
