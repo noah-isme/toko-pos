@@ -112,7 +112,7 @@ export const salesRouter = router({
 
         // Get user's role and accessible outlets
         console.log("STEP 3: Fetching user from database...");
-        const user = await db.user.findUnique({
+        let user = await db.user.findUnique({
           where: { id: ctx.session.user.id },
           include: {
             userOutlets: {
@@ -121,6 +121,18 @@ export const salesRouter = router({
             },
           },
         });
+
+        if (!user && ctx.session.user.email) {
+          user = await db.user.findUnique({
+            where: { email: ctx.session.user.email },
+            include: {
+              userOutlets: {
+                where: { isActive: true },
+                include: { outlet: true },
+              },
+            },
+          });
+        }
 
         if (!user) {
           console.log("  ❌ User not found!");
@@ -166,7 +178,7 @@ export const salesRouter = router({
         // CASHIER: Only see their own transactions
         // OWNER/ADMIN: See all transactions in accessible outlets
         if (user.role === "CASHIER") {
-          whereClause.cashierId = ctx.session.user.id;
+          whereClause.cashierId = user.id;
         } else {
         }
         console.log("  ✓ Where clause:", JSON.stringify(whereClause, null, 2));
