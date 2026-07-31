@@ -89,7 +89,11 @@ export function OutletProvider({ children }: { children: ReactNode }) {
     if (outletsQuery.data && outletsQuery.data.length > 0) {
       setUserOutlets(outletsQuery.data);
 
-      if (!currentOutlet) {
+      const isCurrentValid = currentOutlet
+        ? outletsQuery.data.some((item) => item.outlet.id === currentOutlet.id)
+        : false;
+
+      if (!currentOutlet || !isCurrentValid) {
         const stored = (() => {
           try {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -99,8 +103,12 @@ export function OutletProvider({ children }: { children: ReactNode }) {
           }
         })();
 
+        const targetId = currentOutlet?.id ?? stored?.id;
+        const targetCode = currentOutlet?.code ?? stored?.code;
+
         const fallback =
-          outletsQuery.data.find((item) => item.outlet.id === stored?.id)?.outlet ??
+          outletsQuery.data.find((item) => item.outlet.id === targetId)?.outlet ??
+          outletsQuery.data.find((item) => item.outlet.code === targetCode)?.outlet ??
           outletsQuery.data[0]?.outlet ??
           null;
 

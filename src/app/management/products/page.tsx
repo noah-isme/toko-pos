@@ -75,12 +75,9 @@ export default function ProductManagementPage() {
   const suppliersQuery = api.products.suppliers.useQuery();
 
   const lowStockQuery = api.inventory.listLowStock.useQuery(
-    { outletId: currentOutlet?.id ?? "", limit: 100 },
+    { outletId: currentOutlet?.id ?? "" },
     { 
       enabled: Boolean(currentOutlet?.id), 
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000,
     },
   );
 
@@ -89,9 +86,6 @@ export default function ProductManagementPage() {
     { outletId: currentOutlet?.id ?? "" },
     {
       enabled: Boolean(currentOutlet?.id),
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000,
     },
   );
 

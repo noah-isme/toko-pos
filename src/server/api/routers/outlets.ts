@@ -355,9 +355,11 @@ export const outletsRouter = router({
     }),
   getUserOutlets: protectedProcedure
     .query(async ({ ctx }) => {
-      const userId = ctx.session.user.id;
+      let userId = ctx.session.user.id;
+      const userEmail = ctx.session.user.email;
+      const userRole = ctx.session.user.role;
 
-      const userOutlets = await db.userOutlet.findMany({
+      let userOutlets = await db.userOutlet.findMany({
         where: {
           userId,
           isActive: true,
@@ -371,6 +373,46 @@ export const outletsRouter = router({
           },
         },
       });
+
+      if (userOutlets.length === 0 && userEmail) {
+        const freshUser = await db.user.findUnique({
+          where: { email: userEmail },
+        });
+        if (freshUser) {
+          userId = freshUser.id;
+          userOutlets = await db.userOutlet.findMany({
+            where: {
+              userId,
+              isActive: true,
+            },
+            include: {
+              outlet: true,
+            },
+            orderBy: {
+              outlet: {
+                name: "asc",
+              },
+            },
+          });
+        }
+      }
+
+      if (userOutlets.length === 0) {
+        const allOutlets = await db.outlet.findMany({
+          orderBy: { name: "asc" },
+        });
+        return allOutlets.map((outlet) => ({
+          id: `auto-${outlet.id}`,
+          outletId: outlet.id,
+          role: (userRole ?? "OWNER") as "OWNER" | "MANAGER" | "CASHIER",
+          outlet: {
+            id: outlet.id,
+            name: outlet.name,
+            code: outlet.code,
+            address: outlet.address ?? undefined,
+          },
+        }));
+      }
 
       return userOutlets.map((userOutlet) => ({
         id: userOutlet.id,

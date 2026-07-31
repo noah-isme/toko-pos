@@ -172,7 +172,10 @@ export const withOutletAccess = <TInput = OutletResolverInput>(
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
 
-    const outletAccess = await getUserAccess(ctx.session.user.id);
+    const outletAccess = await getUserAccess(
+      ctx.session.user.id,
+      ctx.session.user.email,
+    );
     // `requireOutletAccess` attaches this middleware before the procedure's
     // `.input()` parser runs, so the middleware's own `input` is undefined at
     // this point. Read the raw input directly to resolve outlet id(s).

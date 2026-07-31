@@ -280,6 +280,22 @@ Jika masalah masih berlanjut setelah troubleshooting:
 
 ---
 
-**Last Updated:** 2024
-**Version:** 1.0
+### ❌ Masalah 5: Session User ID / Outlet ID Stale Setelah Database Re-seed (`seed:full`)
+**Gejala:**
+- `currentOutlet` bernilai `undefined` atau null
+- Query `getAllInventory` tidak berjalan (pending/disabled) sehingga stok tampil `0`
+- `UNAUTHORIZED: User tidak ditemukan` dari tRPC
+
+**Penyebab:**
+Setelah menjalankan script `seed:full`, ID pengguna & outlet di database berubah. Namun JWT cookie atau `localStorage` browser masih menyimpan ID lama.
+
+**Solusi Otomatis:**
+- Sistem kini secara otomatis melakukan *fallback search* menggunakan email session pengguna jika `userId` pada JWT tidak ditemukan di DB.
+- `OutletProvider` secara otomatis merecover `currentOutlet` dengan mencocokkan kode outlet (e.g. `MAIN`) atau memilih outlet aktif pertama.
+- Pengguna yang mengalami masalah ini juga bisa melakukan **logout & login kembali** untuk memperbarui JWT session.
+
+---
+
+**Last Updated:** 2026-08-01
+**Version:** 1.1
 **Status:** Active

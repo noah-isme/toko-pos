@@ -10,8 +10,11 @@ export type UserAccess = {
 
 const ADMIN_ROLES = new Set<Role>([Role.ADMIN, Role.OWNER]);
 
-export const getUserAccess = async (userId: string): Promise<UserAccess> => {
-  const user = await db.user.findUnique({
+export const getUserAccess = async (
+  userId: string,
+  userEmail?: string | null,
+): Promise<UserAccess> => {
+  let user = await db.user.findUnique({
     where: { id: userId },
     select: {
       role: true,
@@ -22,6 +25,19 @@ export const getUserAccess = async (userId: string): Promise<UserAccess> => {
     },
   });
 
+  if (!user && userEmail) {
+    user = await db.user.findUnique({
+      where: { email: userEmail },
+      select: {
+        role: true,
+        userOutlets: {
+          where: { isActive: true },
+          select: { outletId: true },
+        },
+      },
+    });
+  }
+
   if (!user) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
@@ -29,9 +45,17 @@ export const getUserAccess = async (userId: string): Promise<UserAccess> => {
     });
   }
 
+  let outletIds = user.userOutlets.map((uo) => uo.outletId);
+
+  // If user is ADMIN or OWNER and has no explicit userOutlets mapping, give access to all outlets
+  if (outletIds.length === 0 && ADMIN_ROLES.has(user.role)) {
+    const allOutlets = await db.outlet.findMany({ select: { id: true } });
+    outletIds = allOutlets.map((o) => o.id);
+  }
+
   return {
     role: user.role,
-    outletIds: user.userOutlets.map((uo) => uo.outletId),
+    outletIds,
   };
 };
 
