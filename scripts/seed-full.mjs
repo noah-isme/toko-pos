@@ -18,6 +18,14 @@ const toDecimal = (value) => new Prisma.Decimal(Number(value).toFixed(2));
 const toDate = (iso) => new Date(iso);
 const startOfUtcDay = (date) =>
   new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+const relDate = (daysOffset, hour = 10, min = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  d.setHours(hour, min, 0, 0);
+  return d.toISOString();
+};
+
 const auditLogBuffer = [];
 
 function queueAuditLog(entry) {
@@ -656,8 +664,8 @@ const cashSessionSeeds = [
     closingCash: 215000,
     expectedCash: 220000,
     difference: -5000,
-    openTime: "2025-10-12T01:30:00.000Z",
-    closeTime: "2025-10-12T14:05:00.000Z",
+    openTime: relDate(-1, 8, 0),
+    closeTime: relDate(-1, 18, 0),
   },
   {
     key: "main-open",
@@ -667,7 +675,7 @@ const cashSessionSeeds = [
     closingCash: null,
     expectedCash: null,
     difference: null,
-    openTime: "2025-10-13T01:55:00.000Z",
+    openTime: relDate(0, 8, 0),
     closeTime: null,
   },
 ];
@@ -691,7 +699,7 @@ const saleSeeds = [
     outletCode: "MAIN",
     cashierEmail: "cashier@example.com",
     sessionKey: "main-closed-yesterday",
-    soldAt: "2025-10-12T03:15:00.000Z",
+    soldAt: relDate(-1, 9, 15),
     notes: "Shift pagi - promo roti wholegrain",
     items: [
       { sku: "SKU-COFFEE-ARABICA-250", quantity: 2, discount: 10000 },
@@ -706,7 +714,7 @@ const saleSeeds = [
     receiptNumber: "POS-2025-2015",
     outletCode: "BR2",
     cashierEmail: "admin@example.com",
-    soldAt: "2025-10-12T06:45:00.000Z",
+    soldAt: relDate(-1, 13, 45),
     notes: "Shift siang - bundling dairy & household",
     items: [
       { sku: "SKU-MILK-FRESH-1L", quantity: 3, discount: 0 },
@@ -723,7 +731,7 @@ const saleSeeds = [
     outletCode: "MAIN",
     cashierEmail: "cashier@example.com",
     sessionKey: "main-open",
-    soldAt: "2025-10-13T02:40:00.000Z",
+    soldAt: relDate(0, 9, 40),
     notes: "Shift pagi - isi ulang rumah tangga",
     items: [
       { sku: "SKU-TEA-PREMIUM-50", quantity: 1, discount: 0 },
@@ -740,7 +748,7 @@ const saleSeeds = [
     receiptNumber: "POS-2025-2020",
     outletCode: "BR2",
     cashierEmail: "admin@example.com",
-    soldAt: "2025-10-13T05:05:00.000Z",
+    soldAt: relDate(0, 11, 5),
     notes: "Shift siang - repeat customer membership",
     items: [
       { sku: "SKU-COFFEE-ARABICA-250", quantity: 1, discount: 3000 },
@@ -757,7 +765,7 @@ const saleSeeds = [
     outletCode: "MAIN",
     cashierEmail: "cashier@example.com",
     sessionKey: "main-open",
-    soldAt: "2025-10-13T04:15:00.000Z",
+    soldAt: relDate(0, 14, 15),
     notes: "Shift pagi - paket camilan & kebersihan",
     items: [
       { sku: "SKU-SNACK-NORI-12", quantity: 4, discount: 0 },
@@ -774,7 +782,7 @@ const saleSeeds = [
     outletCode: "MAIN",
     cashierEmail: "cashier@example.com",
     sessionKey: "main-open",
-    soldAt: "2025-10-13T05:00:00.000Z",
+    soldAt: relDate(0, 15, 0),
     notes: "Shift pagi - transaksi latihan void",
     items: [
       { sku: "SKU-BREAD-WHOLEGRAIN", quantity: 1, discount: 0 },
@@ -794,7 +802,7 @@ const refundSeeds = [
     amount: 39000,
     reason: "Kemasan pembersih lantai bocor",
     approvedByEmail: "admin@example.com",
-    processedAt: "2025-10-13T05:45:00.000Z",
+    processedAt: relDate(0, 15, 45),
     method: "CASH",
     items: [
       { sku: "SKU-FLOOR-LEMON-1L", quantity: 1 },
@@ -807,7 +815,7 @@ const voidSeeds = [
     receiptNumber: "POS-2025-4040",
     reason: "Pembayaran ganda terdeteksi",
     performedByEmail: "owner@example.com",
-    processedAt: "2025-10-13T05:25:00.000Z",
+    processedAt: relDate(0, 15, 25),
   },
 ];
 
@@ -816,19 +824,19 @@ const lowStockTargets = [
     sku: "SKU-TEA-PREMIUM-50",
     outletCode: "MAIN",
     note: "Seed: buffer teh kritis",
-    triggeredAt: "2025-10-13T06:15:00.000Z",
+    triggeredAt: relDate(0, 16, 15),
   },
   {
     sku: "SKU-MILK-FRESH-1L",
     outletCode: "BR2",
     note: "Seed: stok susu BR2 rendah",
-    triggeredAt: "2025-10-13T06:20:00.000Z",
+    triggeredAt: relDate(0, 16, 20),
   },
   {
     sku: "SKU-SNACK-NORI-12",
     outletCode: "MAIN",
     note: "Seed: camilan favorit hampir habis",
-    triggeredAt: "2025-10-13T06:30:00.000Z",
+    triggeredAt: relDate(0, 16, 30),
   },
 ];
 
