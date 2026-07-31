@@ -555,7 +555,10 @@ export const outletsRouter = router({
     .input(stockTransferActionInputSchema)
     .output(stockTransferItemSchema)
     .mutation(async ({ input, ctx }) => {
-      const { role } = await getUserAccess(ctx.session.user.id);
+      const { role } = await getUserAccess(
+        ctx.session.user.id,
+        ctx.session.user.email,
+      );
       assertAdminOrOwner(role);
       const userId = ctx.session.user.id;
 
@@ -621,7 +624,10 @@ export const outletsRouter = router({
     .input(stockTransferActionInputSchema)
     .output(stockTransferItemSchema)
     .mutation(async ({ input, ctx }) => {
-      const { role } = await getUserAccess(ctx.session.user.id);
+      const { role } = await getUserAccess(
+        ctx.session.user.id,
+        ctx.session.user.email,
+      );
       assertAdminOrOwner(role);
 
       const transfer = await db.stockTransfer.findUnique({
@@ -687,7 +693,10 @@ export const outletsRouter = router({
     .output(stockTransferItemSchema)
     .mutation(async ({ input, ctx }) => {
       const userId = ctx.session.user.id;
-      const outletAccess = await getUserAccess(userId);
+      const outletAccess = await getUserAccess(
+        userId,
+        ctx.session.user.email,
+      );
 
       const transfer = await db.stockTransfer.findUnique({
         where: { id: input.id },

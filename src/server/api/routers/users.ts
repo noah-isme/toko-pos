@@ -59,15 +59,18 @@ const countBlockingDependencies = async (userId: string) => {
   );
 };
 
-const requireAdminOrOwner = async (userId: string) => {
-  const access = await getUserAccess(userId);
+const requireAdminOrOwner = async (
+  userId: string,
+  userEmail?: string | null,
+) => {
+  const access = await getUserAccess(userId, userEmail);
   assertAdminOrOwner(access.role);
   return access;
 };
 
 export const usersRouter = router({
   list: protectedProcedure.output(userListOutputSchema).query(async ({ ctx }) => {
-    await requireAdminOrOwner(ctx.session.user.id);
+    await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
     const users = await db.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -97,7 +100,7 @@ export const usersRouter = router({
   create: protectedProcedure
     .input(userCreateInputSchema)
     .mutation(async ({ input, ctx }) => {
-      await requireAdminOrOwner(ctx.session.user.id);
+      await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
       const existing = await db.user.findUnique({
         where: { email: input.email },
@@ -141,7 +144,7 @@ export const usersRouter = router({
   update: protectedProcedure
     .input(userUpdateInputSchema)
     .mutation(async ({ input, ctx }) => {
-      await requireAdminOrOwner(ctx.session.user.id);
+      await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
       const target = await db.user.findUnique({
         where: { id: input.id },
@@ -223,7 +226,7 @@ export const usersRouter = router({
   delete: protectedProcedure
     .input(userDeleteInputSchema)
     .mutation(async ({ input, ctx }) => {
-      await requireAdminOrOwner(ctx.session.user.id);
+      await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
       if (input.id === ctx.session.user.id) {
         throw new TRPCError({
@@ -276,7 +279,7 @@ export const usersRouter = router({
     .input(userDeleteInputSchema)
     .output(userOutletsOutputSchema)
     .query(async ({ input, ctx }) => {
-      await requireAdminOrOwner(ctx.session.user.id);
+      await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
       const assignments = await db.userOutlet.findMany({
         where: { userId: input.id },
@@ -299,7 +302,7 @@ export const usersRouter = router({
   setOutletAssignment: protectedProcedure
     .input(userOutletAssignmentInputSchema)
     .mutation(async ({ input, ctx }) => {
-      await requireAdminOrOwner(ctx.session.user.id);
+      await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
       const [user, outlet] = await Promise.all([
         db.user.findUnique({ where: { id: input.userId }, select: { id: true } }),
@@ -347,7 +350,7 @@ export const usersRouter = router({
   removeOutletAssignment: protectedProcedure
     .input(userOutletAssignmentRemoveInputSchema)
     .mutation(async ({ input, ctx }) => {
-      await requireAdminOrOwner(ctx.session.user.id);
+      await requireAdminOrOwner(ctx.session.user.id, ctx.session.user.email);
 
       await db.userOutlet.deleteMany({
         where: {

@@ -14,7 +14,7 @@ export const requireAdminOrOwnerSession = async (): Promise<AdminSessionResult> 
     return { ok: false, status: 401, error: "Unauthorized" };
   }
 
-  const access = await getUserAccess(session.user.id);
+  const access = await getUserAccess(session.user.id, session.user.email);
   if (access.role !== Role.ADMIN && access.role !== Role.OWNER) {
     return { ok: false, status: 403, error: "Forbidden" };
   }

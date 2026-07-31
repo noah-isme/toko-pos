@@ -69,7 +69,10 @@ const enforceUserIsAdminOrOwner = t.middleware(async ({ ctx, next }) => {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
-  const outletAccess = await getUserAccess(ctx.session.user.id);
+  const outletAccess = await getUserAccess(
+    ctx.session.user.id,
+    ctx.session.user.email,
+  );
   assertAdminOrOwner(outletAccess.role);
 
   return next({
