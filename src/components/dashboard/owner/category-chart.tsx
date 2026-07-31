@@ -112,10 +112,10 @@ export function CategoryChart({
         </p>
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
         {/* Chart */}
-        <div className="flex-shrink-0">
-          <ResponsiveContainer width={height} height={height}>
+        <div className="mx-auto h-[200px] w-[200px] flex-shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 isAnimationActive={!prefersReducedMotion}
@@ -139,29 +139,29 @@ export function CategoryChart({
         </div>
 
         {/* Legend */}
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 space-y-1 min-w-0">
           {chartData.map((item, index) => (
             <motion.div
               key={item.name}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.4 + index * 0.05 }}
-              className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-muted/50"
+              className="flex items-center justify-between gap-2 rounded-lg p-1.5 transition-colors hover:bg-muted/50"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 <div
-                  className="h-3 w-3 rounded-sm"
+                  className="h-3 w-3 rounded-sm flex-shrink-0"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-sm font-medium text-foreground">
+                <span className="text-xs sm:text-sm font-medium text-foreground truncate" title={item.name}>
                   {item.name}
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                <span className="text-xs text-muted-foreground w-12 text-right">
                   {item.percentage.toFixed(1)}%
                 </span>
-                <span className="min-w-[80px] text-right text-sm font-semibold text-foreground">
+                <span className="text-xs sm:text-sm font-semibold text-foreground whitespace-nowrap min-w-[85px] text-right">
                   {formatCurrency(item.value)}
                 </span>
               </div>

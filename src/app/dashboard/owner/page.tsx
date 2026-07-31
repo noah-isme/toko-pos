@@ -263,8 +263,8 @@ export default function OwnerDashboardPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+      {/* KPI Cards (2x2 Grid) */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-2 lg:gap-6">
         {kpiQuery.isLoading ? (
           <LoadingKpiSkeleton count={4} />
         ) : kpiQuery.error ? (
@@ -351,11 +351,7 @@ export default function OwnerDashboardPage() {
             onViewAll={handleViewAllStock}
           />
         )}
-        {shiftQuery.isLoading ? (
-          <LoadingCardSkeleton count={1} />
-        ) : (
-          <ShiftMonitoring data={shiftData} title="Shift Aktif Hari Ini" />
-        )}
+        <ShiftMonitoring data={shiftData} title="Shift Aktif Hari Ini" />
       </section>
 
       {/* Activity Log */}

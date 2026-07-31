@@ -64,21 +64,21 @@ export function KpiCard({
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
       {/* Content */}
-      <div className="relative space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <div className="relative space-y-2 min-w-0">
+        <p className="text-sm font-medium text-muted-foreground truncate">{title}</p>
 
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-2 min-w-0">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.4, delay: delay * 0.1 + 0.2 }}
-            className="flex items-baseline gap-1"
+            className="flex items-baseline gap-1 min-w-0 flex-1"
           >
-            <span className="text-3xl font-bold tracking-tight text-foreground lg:text-4xl">
+            <span className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-2xl xl:text-3xl truncate" title={String(value)}>
               {value}
             </span>
             {suffix && (
-              <span className="text-base font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
                 {suffix}
               </span>
             )}
@@ -94,7 +94,7 @@ export function KpiCard({
                 ease: "easeOut",
               }}
               className={cn(
-                "mb-1 flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold",
+                "mb-1 flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold flex-shrink-0",
                 trendColor,
               )}
             >
